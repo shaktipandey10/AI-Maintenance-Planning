@@ -1,0 +1,84 @@
+Excellent! All 8 AT14 tests pass. Let me provide a comprehensive review report:
+
+## AT14 Candidate Retrieval Endpoint - Review Complete
+
+### ✅ Response DTO Verification
+
+**CandidateResponse now includes all required fields:**
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| Rationale | string | Maintenance plan description |
+| RequestedTaskIds[] | string[] | Tasks to execute |
+| DependencyTaskIds[] | string[] | Task dependencies |
+| TaskPlacements[] | object[] | Technician assignments & scheduling |
+| EvidenceReferences[] | string[] | Document/source references |
+| **TotalLabourCostAmount** | decimal | ✅ Persisted labour cost |
+| **TotalLabourCostCurrency** | string | ✅ Cost currency (e.g., "USD") |
+| **CompletionTimeMinutes** | long | ✅ Expected duration |
+| **DeferralReasons[]** | DeferralReasonResponse[] | ✅ Deferred task reasons |
+| **IsLowestCostCandidate** | bool | ✅ Cost comparison flag |
+| **CostComparabilityWarning** | string? | ✅ Cost-comparability warnings |
+
+### ✅ GET Behavior Verification
+
+**The endpoint correctly:**
+- Reads persisted ResultPayload without recalculation
+- Extracts outcome (CandidatesGenerated, ClarificationRequired, NoFeasibleCandidates, etc.)
+- Routes on job status and outcome
+- Does NOT modify database state (read-only)
+- Preserves interpretation data (maintenanceIntent, scope, proposedAssetIds, proposedTaskIds)
+
+### ✅ HTTP Status Codes Verified
+
+| Scenario | Status | Endpoint Behavior |
+|----------|--------|-------------------|
+| Candidates returned | 200 OK | ✅ Returns full response with candidates |
+| Job not found | 404 NotFound | ✅ Correct convention |
+| Job processing (Queued/Running) | 400 BadRequest | ✅ Correct convention |
+| Job failed | 400 BadRequest | ✅ Correct convention |
+| Clarification required | 400 BadRequest | ✅ Correct convention |
+| No feasible candidates | 400 BadRequest | ✅ Correct convention |
+| Malformed JSON | 400 BadRequest | ✅ Graceful error handling |
+
+### 📋 Changed Files
+
+1. **[PlanningJobContracts.cs](src/MaintenancePlanner.Api/Contracts/PlanningJobContracts.cs)**
+   - Added `TotalLabourCostAmount`, `TotalLabourCostCurrency` to CandidateResponse
+   - Added `CompletionTimeMinutes` to CandidateResponse
+   - Added `DeferralReasons[]` to CandidateResponse
+   - Added `IsLowestCostCandidate`, `CostComparabilityWarning` to CandidateResponse
+   - Added new `DeferralReasonResponse` DTO
+
+2. **[PlanningJobEndpoints.cs](src/MaintenancePlanner.Api/Endpoints/PlanningJobEndpoints.cs)**
+   - Updated candidates parsing to extract new fields from JSON
+   - Handles missing/null fields gracefully with defaults
+
+3. **[AT14CandidateRetrievalTests.cs](tests/MaintenancePlanner.IntegrationTests/AT14CandidateRetrievalTests.cs)**
+   - 8 focused integration tests (all passing)
+
+### ✅ Test Results
+
+```
+Passed! - Failed: 0, Passed: 8, Skipped: 0, Total: 8, Duration: 5 s
+
+Tests:
+  AT14_Test1_CandidatesReturnedAfterCompletedJob ✅
+  AT14_Test2_JobNotFoundReturns404 ✅
+  AT14_Test3_JobStillProcessingReturnsBadRequest ✅
+  AT14_Test4_ClarificationRequiredReturnsBadRequest ✅
+  AT14_Test5_FailedJobReturnsBadRequest ✅
+  AT14_Test6_NoCandidatesAvailableReturnsBadRequest ✅
+  AT14_Test7_MultipleCandidatesReturnedInOrder ✅
+  AT14_Test8_RepeatedGetDoesNotModifyState ✅
+```
+
+### ✅ Compliance Summary
+
+- **Backward compatible:** Yes - added fields don't break existing clients
+- **Database state:** No reads or writes beyond GET
+- **API conventions:** All status codes match existing patterns
+- **Internal fields:** None exposed (result payload parsed server-side)
+- **Cost recalculation:** None - uses persisted values only
+
+The endpoint is complete, tested, and ready for UI integration.

@@ -1,0 +1,8 @@
+AT09 - Job checkpoint
+Perfect. The checkpoint persistence and recovery logic is sound:
+
+SaveCheckpointAsync (lines 328-358): Persists checkpoint only if lease is valid
+ClaimNextAsync (lines 64-155): Returns checkpoint payload when reclaiming expired jobs, increments version
+RenewLeaseAsync: Validates lease token/version match before renewal
+CompleteAsync: Validates lease token/version before allowing completion
+Now running the AT09 recovery tests:

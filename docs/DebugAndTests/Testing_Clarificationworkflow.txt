@@ -1,0 +1,176 @@
+clarification workflow testing details 
+
+
+I'll provide you with step-by-step instructions to manually test the clarification workflow:
+
+## **Manual Clarification Workflow Test**
+
+### **Prerequisites**
+- Backend running: `http://localhost:5083`
+- Frontend running: `http://localhost:5173`
+- Ollama service running with `qwen2.5:7b` model
+
+---
+
+## **Test Steps**
+
+### **Step 1: Create a Planning Request (First Attempt)**
+
+**URL:** `http://localhost:5173`
+
+**Fill in the form:**
+- **Maintenance Request:** `P-101 Bearing Replacement and Inspection`
+- **Asset IDs:** `P-101`
+- **Maintenance Window:** (leave empty)
+
+**Click:** "Create Planning Job"
+
+**Expected Result:**
+- Success message appears: `Planning job created successfully! Job ID: {UUID}`
+- Copy the Job ID
+- Green "Check Status" button appears
+
+---
+
+### **Step 2: Wait for Job to Complete**
+
+The backend worker will process the job. This takes time depending on Ollama response time (usually 30-60 seconds).
+
+You can monitor progress by:
+1. Scrolling to "Get Planning Job Status" section
+2. Paste the Job ID
+3. Click "Get Status" repeatedly to check progress
+4. Watch CurrentStep change: `Queued` → `Processing` → `Completed`
+
+---
+
+### **Step 3: View Clarification Section (When Outcome = ClarificationRequired)**
+
+**Expected when job completes:**
+- Status: `Succeeded`
+- Current Step: `Completed`
+- **Orange Section Appears:** "Clarification Required"
+
+**This section will show:**
+
+1. **Planning Summary Box:**
+   - Maintenance Intent: `P-101 Bearing Replacement and Inspection`
+   - Scope: (the analyzed scope)
+   - Proposed Assets: `P-101`
+   - Proposed Tasks: (task IDs)
+
+2. **Questions Box:**
+   - List of clarification questions (e.g., "Spare part availability check")
+
+---
+
+### **Step 4: Submit Clarification**
+
+**In the Clarification Required section:**
+
+**Fill in:**
+- **Maintenance Window ID (Required):** `window-2024-Q1`
+  - (Can be any value - this is what the planner was missing)
+- **Additional Context (Optional):** `Bearing replacement is critical for P-101 pump operation`
+
+**Click:** "Submit Clarification"
+
+**Expected Result:**
+- Green success message: `Clarification submitted successfully. Job has been re-queued for planning.`
+- Status section updates:
+  - Status: `Queued` (changed from `Succeeded`)
+  - CurrentStep: `Queued`
+  - AttemptCount: `1` (reset from original value)
+
+---
+
+### **Step 5: Monitor Re-Planning**
+
+**Check status again** by scrolling to "Get Planning Job Status" section:
+- Click "Get Status" button (or manually enter Job ID again)
+- Watch for updates:
+  - Status: `Queued` → `Running` → `Succeeded` or `Completed`
+  - CurrentStep: `Processing` → `Completed`
+  - CompletedAtUtc: Updated timestamp
+  - ResultPayload: New planning result (may still show clarification or show candidates)
+
+---
+
+### **Step 6: Test Error Cases**
+
+#### **Test 1: Submit Clarification Without WindowId**
+- Leave "Maintenance Window ID" empty
+- Click "Submit Clarification"
+- **Expected:** Error message: `Maintenance Window ID is required`
+
+#### **Test 2: Submit with Invalid Job ID**
+- Get Status with non-existent UUID
+- **Expected:** Error message: `Job not found: {UUID}`
+
+#### **Test 3: Submit Clarification on Non-Clarification Job**
+- Create a job that completes with outcome=`CandidatesGenerated` (if you get lucky)
+- Try to submit clarification
+- **Expected:** Error message: `Job outcome is {outcome}, not 'ClarificationRequired'`
+
+---
+
+## **Test Data Summary**
+
+| Field | Value | Notes |
+|-------|-------|-------|
+| Maintenance Request | `P-101 Bearing Replacement and Inspection` | Triggers clarification for P-101 |
+| Asset IDs | `P-101` | Must exist in database |
+| Maintenance Window (Step 1) | Leave empty | This triggers the clarification |
+| Maintenance Window (Step 4) | `window-2024-Q1` | Any string value works |
+| Additional Context | `Optional text` | Can be left empty |
+
+---
+
+## **Expected UI Flow**
+
+```
+1. Create Planning Request
+   ↓
+2. Success message with Job ID
+   ↓
+3. Get Planning Job Status (monitor)
+   ↓
+4. Status = Succeeded, Outcome = ClarificationRequired
+   ↓
+5. Orange "Clarification Required" section appears
+   ↓
+6. Enter Window ID and Submit
+   ↓
+7. Success message, Status changes to Queued
+   ↓
+8. Job re-runs with new WindowId
+   ↓
+9. Status updates to Succeeded/Completed
+```
+
+---
+
+## **Alternative: Use Existing Test Job**
+
+If you don't want to wait for Ollama:
+
+**Job ID:** `9457ad13-5aae-45f5-84fb-ea75a6e8c9cc` (if it still requires clarification)
+
+1. Go to "Get Planning Job Status"
+2. Paste this Job ID
+3. Click "Get Status"
+4. If it shows clarification section, you can test submission directly
+5. Submit with any Window ID
+
+---
+
+## **Key Things to Verify**
+
+✅ **Clarification detection:** Section appears only when outcome=`ClarificationRequired`
+✅ **Questions display:** All questions from result payload are shown
+✅ **Summary display:** Planning interpretation displays correctly
+✅ **Submission:** WindowId is required, AdditionalContext is optional
+✅ **State update:** After submission, status changes to `Queued`
+✅ **Re-planning:** Job re-runs and can complete again
+
+Would you like me to create a detailed test checklist document?

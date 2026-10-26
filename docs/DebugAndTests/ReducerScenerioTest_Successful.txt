@@ -1,0 +1,48 @@
+testing script 
+
+
+$body = '{"requestText":"Replace the P-101 bearing","assetIds":["P-101"],"windowId":"MW-P101-REDUCED-20261024"}'
+$key = [guid]::NewGuid().ToString()
+Invoke-RestMethod "http://localhost:5128/api/planning-jobs" -Method Post -Headers @{"Idempotency-Key"=$key} -ContentType "application/json" -Body $body
+
+Invoke-RestMethod "http://localhost:5128/api/planning-jobs/b9e99147-3bbd-4b2c-83b0-ee5d627b3b95" | ConvertTo-Json -Depth 10
+
+
+
+
+Ooutput
+
+{
+    "jobId":  "b9e99147-3bbd-4b2c-83b0-ee5d627b3b95",
+    "status":  "Succeeded",
+    "attemptCount":  1,
+    "maxAttempts":  2,
+    "currentStep":  "Completed",
+    "resultPayload":  "{\"outcome\":\"Infeasible\",\"result\":{\"violations\":[{\"code\":\"PART_UNAVAILABLE\",\"message\":\"Spare part BR-101 has 0 available but 1.0 is required across the requested scope.\",\"taskId\":\"P101-BEARING-REPLACEMENT\",\"resourceId\":\"BR-101\"},{\"code\":\"TASKS_EXCEED_WINDOW\",\"message\":\"The predecessor chain ending at task P101-VERIFICATION requires 360 minutes, exceeding window MW-P101-REDUCED-20261024.\",\"taskId\":\"P101-VERIFICATION\",\"resourceId\":\"MW-P101-REDUCED-20261024\"}],\"assumptions\":[\"The request is specifically for the bearing replacement task related to P-101.\"],\"evidenceReferences\":[{\"sourceKind\":0,\"sourceId\":\"P-101\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":null,\"excerpt\":\"Cooling Water Pump P-101 (CP-100)\"},{\"sourceKind\":2,\"sourceId\":\"MW-P101-REDUCED-20261024\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":\"P-101 Saturday reduced window\",\"excerpt\":\"2026-10-24T08:00:00.0000000\\u002B05:30 to 2026-10-24T12:00:00.0000000\\u002B05:30 (Asia/Kolkata)\"},{\"sourceKind\":1,\"sourceId\":\"P101-BEARING-REPLACEMENT\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":null},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Preparation\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":\"For the P-101 full bearing-replacement scope, schedule preparation before bearing replacement. Planning estimate: 60 minutes. Crew: one technician with MECHANICAL skill.\\r\\n\\r\\n\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Verification\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":\"Schedule verification after bearing replacement. Planning estimate: 120 minutes. Crew: one technician with INSTRUMENTATION skill.\\r\\n\\r\\nThese task estimates, skills, crew sizes and part quantities are synthetic exerciseassumptions supplied for the maintenance-planning proof of concept.\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Bearing replacement\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":\"Schedule bearing replacement after preparation. Planning estimate: 180 minutes. Crew: two technicians, each with ROTATING-EQUIPMENT skill. Required part: one BR-101 bearing.\\r\\n\\r\\n\"},{\"sourceKind\":1,\"sourceId\":\"P101-PREP\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":null},{\"sourceKind\":1,\"sourceId\":\"P101-VERIFICATION\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":null}],\"interpretation\":{\"maintenanceIntent\":\"Replace the P-101 bearing\",\"scope\":\"Replace the bearing in the Cooling Water Pump P-101\",\"proposedAssetIds\":[\"P-101\"],\"proposedTaskIds\":[\"P101-BEARING-REPLACEMENT\"],\"missingInformation\":[],\"assumptions\":[\"The request is specifically for the bearing replacement task related to P-101.\"],\"scopeResolution\":3,\"scopeMappings\":[{\"taskId\":\"P101-BEARING-REPLACEMENT\",\"assetId\":\"P-101\",\"requestExcerpt\":null}]}}}",
+    "failureCode":  null,
+    "createdAtUtc":  "2026-10-24T00:10:48.8616267+00:00",
+    "startedAtUtc":  "2026-10-24T00:10:50.9807326+00:00",
+    "completedAtUtc":  "2026-10-24T00:12:45.093298+00:00",
+    "errorMessage":  null
+}
+
+
+$jobId = "b9e99147-3bbd-4b2c-83b0-ee5d627b3b95"
+
+$result = Invoke-RestMethod `
+    -Uri "http://localhost:5128/api/planning-jobs/$jobId" `
+    -Method Get
+
+$payload = $result.resultPayload | ConvertFrom-Json
+
+
+.
+..
+
+
+code                message                                                                
+----                -------                                                                
+PART_UNAVAILABLE    Spare part BR-101 has 0 available but 1.0 is required across the       
+                    requested scope.                                                       
+TASKS_EXCEED_WINDOW The predecessor chain ending at task P101-VERIFICATION requires 360    
+                    minutes, exceeding window MW-P101-REDUCED-20261024.  

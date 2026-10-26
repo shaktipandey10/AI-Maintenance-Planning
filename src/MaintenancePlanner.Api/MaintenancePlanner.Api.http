@@ -1,0 +1,49 @@
+@MaintenancePlanner.Api_HostAddress = http://localhost:5083
+
+GET {{MaintenancePlanner.Api_HostAddress}}/api/assets
+Accept: application/json
+
+###
+
+GET {{MaintenancePlanner.Api_HostAddress}}/api/technicians
+Accept: application/json
+
+###
+
+GET {{MaintenancePlanner.Api_HostAddress}}/api/spareparts
+Accept: application/json
+
+###
+
+GET {{MaintenancePlanner.Api_HostAddress}}/api/maintenace-windows
+Accept: application/json
+
+###
+
+GET {{MaintenancePlanner.Api_HostAddress}}/api/task-catalogue/P-101
+Accept: application/json
+
+###
+
+# @name createPlanningJob
+POST {{MaintenancePlanner.Api_HostAddress}}/api/planning-jobs
+Content-Type: application/json
+Idempotency-Key: 210b96c6-9151-47f2-941d-c8f253ab1a05
+
+{
+  "requestText": "Plan full bearing replacement for P-101.",
+  "assetIds": ["P-101"],
+  "windowId": "MW-P101-BASELINE-20261024"
+}
+
+###
+
+GET {{MaintenancePlanner.Api_HostAddress}}/api/planning-jobs/{{createPlanningJob.response.body.$.jobId}}
+Accept: application/json
+
+###
+
+GET {{MaintenancePlanner.Api_HostAddress}}/api/planning-jobs/00000000-0000-0000-0000-000000000000
+Accept: application/json
+
+###

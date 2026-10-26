@@ -1,0 +1,200 @@
+
+
+
+Clarification if windowid not given
+Replace the bearing on cooling water pump P-101. Check technician skills, spare-part availability, and task dependencies. Generate feasible maintenance alternatives.
+
+
+positive scenario 
+
+Accessible after restart as well
+
+2CE5F48D-DEC4-4EE8-A5EF-1369A4AB8B0D
+
+Maintenance Request:
+Plan maintenance for P-101 Cooling Water Pump (model CP-100). Perform preparation, bearing replacement, and verification in dependency order. Use only the applicable P-101 task definitions and their supporting evidence. Do not use P-102 inspection-only scope as instructions for P-101.
+
+Maintenance Window ID:
+MW-P101-BASELINE-20261024
+
+
+
+
+Status Request
+
+
+attemptCount
+: 
+1
+clarificationPayload
+: 
+null
+completedAtUtc
+: 
+"2026-10-25T09:14:21.4910315+00:00"
+createdAtUtc
+: 
+"2026-10-25T09:11:49.9468911+00:00"
+currentStep
+: 
+"Completed"
+errorMessage
+: 
+null
+failureCode
+: 
+null
+jobId
+: 
+"2ce5f48d-dec4-4ee8-a5ef-1369a4ab8b0d"
+maxAttempts
+: 
+2
+resultPayload
+: 
+"{\"outcome\":\"CandidatesGenerated\",\"result\":{\"candidates\":[{\"taskPlacements\":[{\"taskId\":\"P101-PREP\",\"start\":\"2026-10-24T08:00:00\\u002B05:30\",\"end\":\"2026-10-24T09:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-001\"]},{\"taskId\":\"P101-BEARING-REPLACEMENT\",\"start\":\"2026-10-24T09:00:00\\u002B05:30\",\"end\":\"2026-10-24T12:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-001\",\"TECH-002\"]},{\"taskId\":\"P101-VERIFICATION\",\"start\":\"2026-10-24T12:00:00\\u002B05:30\",\"end\":\"2026-10-24T14:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-003\"]}],\"rationale\":\"Earliest feasible schedule using stable technician-ID tie-breaking.\",\"evidenceReferences\":[{\"sourceKind\":1,\"sourceId\":\"P101-PREP\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":null},{\"sourceKind\":1,\"sourceId\":\"P101-BEARING-REPLACEMENT\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":null},{\"sourceKind\":1,\"sourceId\":\"P101-VERIFICATION\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":null},{\"sourceKind\":0,\"sourceId\":\"P-101\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":null,\"excerpt\":\"Cooling Water Pump P-101 (CP-100)\"},{\"sourceKind\":2,\"sourceId\":\"MW-P101-BASELINE-20261024\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":\"P-101 Saturday baseline window\",\"excerpt\":\"2026-10-24T08:00:00.0000000\\u002B05:30 to 2026-10-24T16:00:00.0000000\\u002B05:30 (Asia/Kolkata)\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Verification\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":\"Schedule verification after bearing replacement. Planning estimate: 120 minutes. Crew: one technician with INSTRUMENTATION skill.\\r\\n\\r\\nThese task estimates, skills, crew sizes and part quantities are synthetic exercise assumptions supplied for the maintenance-planning proof of concept.\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Preparation\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":\"For the P-101 full bearing-replacement scope, schedule preparation before bearing replacement. Planning estimate: 60 minutes. Crew: one technician with MECHANICAL skill.\\r\\n\\r\\n\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Bearing replacement\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":\"Schedule bearing replacement after preparation. Planning estimate: 180 minutes. Crew: two technicians, each with ROTATING-EQUIPMENT skill. Required part: one BR-101 bearing.\\r\\n\\r\\n\"}],\"requestedTaskIds\":[\"P101-PREP\",\"P101-BEARING-REPLACEMENT\",\"P101-VERIFICATION\"],\"dependencyTaskIds\":[],\"deferralReasons\":[],\"totalLabourCostAmount\":360.5,\"totalLabourCostCurrency\":\"UNKNOWN\",\"completionTimeMinutes\":360,\"isLowestCostCandidate\":false,\"costComparabilityWarning\":null},{\"taskPlacements\":[{\"taskId\":\"P101-PREP\",\"start\":\"2026-10-24T08:00:00\\u002B05:30\",\"end\":\"2026-10-24T09:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-003\"]},{\"taskId\":\"P101-BEARING-REPLACEMENT\",\"start\":\"2026-10-24T09:00:00\\u002B05:30\",\"end\":\"2026-10-24T12:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-002\",\"TECH-001\"]},{\"taskId\":\"P101-VERIFICATION\",\"start\":\"2026-10-24T12:00:00\\u002B05:30\",\"end\":\"2026-10-24T14:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-003\"]}],\"rationale\":\"Earliest feasible schedule using the lowest hourly-cost qualified crew.\",\"evidenceReferences\":[{\"sourceKind\":1,\"sourceId\":\"P101-PREP\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":null},{\"sourceKind\":1,\"sourceId\":\"P101-BEARING-REPLACEMENT\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":null},{\"sourceKind\":1,\"sourceId\":\"P101-VERIFICATION\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":null},{\"sourceKind\":0,\"sourceId\":\"P-101\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":null,\"excerpt\":\"Cooling Water Pump P-101 (CP-100)\"},{\"sourceKind\":2,\"sourceId\":\"MW-P101-BASELINE-20261024\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":\"P-101 Saturday baseline window\",\"excerpt\":\"2026-10-24T08:00:00.0000000\\u002B05:30 to 2026-10-24T16:00:00.0000000\\u002B05:30 (Asia/Kolkata)\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Verification\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":\"Schedule verification after bearing replacement. Planning estimate: 120 minutes. Crew: one technician with INSTRUMENTATION skill.\\r\\n\\r\\nThese task estimates, skills, crew sizes and part quantities are synthetic exercise assumptions supplied for the maintenance-planning proof of concept.\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Preparation\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":\"For the P-101 full bearing-replacement scope, schedule preparation before bearing replacement. Planning estimate: 60 minutes. Crew: one technician with MECHANICAL skill.\\r\\n\\r\\n\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Bearing replacement\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":\"Schedule bearing replacement after preparation. Planning estimate: 180 minutes. Crew: two technicians, each with ROTATING-EQUIPMENT skill. Required part: one BR-101 bearing.\\r\\n\\r\\n\"}],\"requestedTaskIds\":[\"P101-PREP\",\"P101-BEARING-REPLACEMENT\",\"P101-VERIFICATION\"],\"dependencyTaskIds\":[],\"deferralReasons\":[],\"totalLabourCostAmount\":355.5,\"totalLabourCostCurrency\":\"UNKNOWN\",\"completionTimeMinutes\":360,\"isLowestCostCandidate\":true,\"costComparabilityWarning\":null}],\"assumptions\":[\"Tasks will be performed in the order: Preparation, Bearing replacement, Verification.\"],\"evidenceReferences\":[{\"sourceKind\":0,\"sourceId\":\"P-101\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":null,\"excerpt\":\"Cooling Water Pump P-101 (CP-100)\"},{\"sourceKind\":2,\"sourceId\":\"MW-P101-BASELINE-20261024\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":\"P-101 Saturday baseline window\",\"excerpt\":\"2026-10-24T08:00:00.0000000\\u002B05:30 to 2026-10-24T16:00:00.0000000\\u002B05:30 (Asia/Kolkata)\"},{\"sourceKind\":1,\"sourceId\":\"P101-BEARING-REPLACEMENT\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":null},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Verification\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":\"Schedule verification after bearing replacement. Planning estimate: 120 minutes. Crew: one technician with INSTRUMENTATION skill.\\r\\n\\r\\nThese task estimates, skills, crew sizes and part quantities are synthetic exercise assumptions supplied for the maintenance-planning proof of concept.\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Preparation\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":\"For the P-101 full bearing-replacement scope, schedule preparation before bearing replacement. Planning estimate: 60 minutes. Crew: one technician with MECHANICAL skill.\\r\\n\\r\\n\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Bearing replacement\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":\"Schedule bearing replacement after preparation. Planning estimate: 180 minutes. Crew: two technicians, each with ROTATING-EQUIPMENT skill. Required part: one BR-101 bearing.\\r\\n\\r\\n\"},{\"sourceKind\":1,\"sourceId\":\"P101-PREP\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":null},{\"sourceKind\":1,\"sourceId\":\"P101-VERIFICATION\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":null}],\"interpretation\":{\"maintenanceIntent\":\"Plan maintenance for P-101 Cooling Water Pump (model CP-100).\",\"scope\":\"Perform preparation, bearing replacement, and verification in dependency order.\",\"proposedAssetIds\":[\"P-101\"],\"proposedTaskIds\":[\"P101-PREP\",\"P101-BEARING-REPLACEMENT\",\"P101-VERIFICATION\"],\"missingInformation\":[],\"assumptions\":[\"Tasks will be performed in the order: Preparation, Bearing replacement, Verification.\"],\"scopeResolution\":3,\"scopeMappings\":[{\"taskId\":\"P101-PREP\",\"assetId\":\"P-101\",\"requestExcerpt\":null},{\"taskId\":\"P101-BEARING-REPLACEMENT\",\"assetId\":\"P-101\",\"requestExcerpt\":null},{\"taskId\":\"P101-VERIFICATION\",\"assetId\":\"P-101\",\"requestExcerpt\":null}]}}}"
+startedAtUtc
+: 
+"2026-10-25T09:11:50.5726939+00:00"
+status
+: 
+"Succeeded" 
+
+
+Response
+
+{
+    "jobId": "2ce5f48d-dec4-4ee8-a5ef-1369a4ab8b0d",
+    "status": "Succeeded",
+    "attemptCount": 1,
+    "maxAttempts": 2,
+    "currentStep": "Completed",
+    "resultPayload": "{\"outcome\":\"CandidatesGenerated\",\"result\":{\"candidates\":[{\"taskPlacements\":[{\"taskId\":\"P101-PREP\",\"start\":\"2026-10-24T08:00:00\\u002B05:30\",\"end\":\"2026-10-24T09:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-001\"]},{\"taskId\":\"P101-BEARING-REPLACEMENT\",\"start\":\"2026-10-24T09:00:00\\u002B05:30\",\"end\":\"2026-10-24T12:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-001\",\"TECH-002\"]},{\"taskId\":\"P101-VERIFICATION\",\"start\":\"2026-10-24T12:00:00\\u002B05:30\",\"end\":\"2026-10-24T14:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-003\"]}],\"rationale\":\"Earliest feasible schedule using stable technician-ID tie-breaking.\",\"evidenceReferences\":[{\"sourceKind\":1,\"sourceId\":\"P101-PREP\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":null},{\"sourceKind\":1,\"sourceId\":\"P101-BEARING-REPLACEMENT\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":null},{\"sourceKind\":1,\"sourceId\":\"P101-VERIFICATION\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":null},{\"sourceKind\":0,\"sourceId\":\"P-101\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":null,\"excerpt\":\"Cooling Water Pump P-101 (CP-100)\"},{\"sourceKind\":2,\"sourceId\":\"MW-P101-BASELINE-20261024\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":\"P-101 Saturday baseline window\",\"excerpt\":\"2026-10-24T08:00:00.0000000\\u002B05:30 to 2026-10-24T16:00:00.0000000\\u002B05:30 (Asia/Kolkata)\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Verification\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":\"Schedule verification after bearing replacement. Planning estimate: 120 minutes. Crew: one technician with INSTRUMENTATION skill.\\r\\n\\r\\nThese task estimates, skills, crew sizes and part quantities are synthetic exercise assumptions supplied for the maintenance-planning proof of concept.\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Preparation\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":\"For the P-101 full bearing-replacement scope, schedule preparation before bearing replacement. Planning estimate: 60 minutes. Crew: one technician with MECHANICAL skill.\\r\\n\\r\\n\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Bearing replacement\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":\"Schedule bearing replacement after preparation. Planning estimate: 180 minutes. Crew: two technicians, each with ROTATING-EQUIPMENT skill. Required part: one BR-101 bearing.\\r\\n\\r\\n\"}],\"requestedTaskIds\":[\"P101-PREP\",\"P101-BEARING-REPLACEMENT\",\"P101-VERIFICATION\"],\"dependencyTaskIds\":[],\"deferralReasons\":[],\"totalLabourCostAmount\":360.5,\"totalLabourCostCurrency\":\"UNKNOWN\",\"completionTimeMinutes\":360,\"isLowestCostCandidate\":false,\"costComparabilityWarning\":null},{\"taskPlacements\":[{\"taskId\":\"P101-PREP\",\"start\":\"2026-10-24T08:00:00\\u002B05:30\",\"end\":\"2026-10-24T09:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-003\"]},{\"taskId\":\"P101-BEARING-REPLACEMENT\",\"start\":\"2026-10-24T09:00:00\\u002B05:30\",\"end\":\"2026-10-24T12:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-002\",\"TECH-001\"]},{\"taskId\":\"P101-VERIFICATION\",\"start\":\"2026-10-24T12:00:00\\u002B05:30\",\"end\":\"2026-10-24T14:00:00\\u002B05:30\",\"technicianIds\":[\"TECH-003\"]}],\"rationale\":\"Earliest feasible schedule using the lowest hourly-cost qualified crew.\",\"evidenceReferences\":[{\"sourceKind\":1,\"sourceId\":\"P101-PREP\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":null},{\"sourceKind\":1,\"sourceId\":\"P101-BEARING-REPLACEMENT\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":null},{\"sourceKind\":1,\"sourceId\":\"P101-VERIFICATION\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":null},{\"sourceKind\":0,\"sourceId\":\"P-101\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":null,\"excerpt\":\"Cooling Water Pump P-101 (CP-100)\"},{\"sourceKind\":2,\"sourceId\":\"MW-P101-BASELINE-20261024\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":\"P-101 Saturday baseline window\",\"excerpt\":\"2026-10-24T08:00:00.0000000\\u002B05:30 to 2026-10-24T16:00:00.0000000\\u002B05:30 (Asia/Kolkata)\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Verification\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":\"Schedule verification after bearing replacement. Planning estimate: 120 minutes. Crew: one technician with INSTRUMENTATION skill.\\r\\n\\r\\nThese task estimates, skills, crew sizes and part quantities are synthetic exercise assumptions supplied for the maintenance-planning proof of concept.\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Preparation\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":\"For the P-101 full bearing-replacement scope, schedule preparation before bearing replacement. Planning estimate: 60 minutes. Crew: one technician with MECHANICAL skill.\\r\\n\\r\\n\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Bearing replacement\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":\"Schedule bearing replacement after preparation. Planning estimate: 180 minutes. Crew: two technicians, each with ROTATING-EQUIPMENT skill. Required part: one BR-101 bearing.\\r\\n\\r\\n\"}],\"requestedTaskIds\":[\"P101-PREP\",\"P101-BEARING-REPLACEMENT\",\"P101-VERIFICATION\"],\"dependencyTaskIds\":[],\"deferralReasons\":[],\"totalLabourCostAmount\":355.5,\"totalLabourCostCurrency\":\"UNKNOWN\",\"completionTimeMinutes\":360,\"isLowestCostCandidate\":true,\"costComparabilityWarning\":null}],\"assumptions\":[\"Tasks will be performed in the order: Preparation, Bearing replacement, Verification.\"],\"evidenceReferences\":[{\"sourceKind\":0,\"sourceId\":\"P-101\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":null,\"excerpt\":\"Cooling Water Pump P-101 (CP-100)\"},{\"sourceKind\":2,\"sourceId\":\"MW-P101-BASELINE-20261024\",\"documentId\":null,\"version\":null,\"page\":null,\"section\":\"P-101 Saturday baseline window\",\"excerpt\":\"2026-10-24T08:00:00.0000000\\u002B05:30 to 2026-10-24T16:00:00.0000000\\u002B05:30 (Asia/Kolkata)\"},{\"sourceKind\":1,\"sourceId\":\"P101-BEARING-REPLACEMENT\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":null},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Verification\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":\"Schedule verification after bearing replacement. Planning estimate: 120 minutes. Crew: one technician with INSTRUMENTATION skill.\\r\\n\\r\\nThese task estimates, skills, crew sizes and part quantities are synthetic exercise assumptions supplied for the maintenance-planning proof of concept.\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Preparation\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":\"For the P-101 full bearing-replacement scope, schedule preparation before bearing replacement. Planning estimate: 60 minutes. Crew: one technician with MECHANICAL skill.\\r\\n\\r\\n\"},{\"sourceKind\":7,\"sourceId\":\"MAN-P101-001:Planning assumptions: Bearing replacement\",\"documentId\":\"MAN-P101-001\",\"version\":\"1.0\",\"page\":null,\"section\":\"Planning assumptions: Bearing replacement\",\"excerpt\":\"Schedule bearing replacement after preparation. Planning estimate: 180 minutes. Crew: two technicians, each with ROTATING-EQUIPMENT skill. Required part: one BR-101 bearing.\\r\\n\\r\\n\"},{\"sourceKind\":1,\"sourceId\":\"P101-PREP\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Preparation\",\"excerpt\":null},{\"sourceKind\":1,\"sourceId\":\"P101-VERIFICATION\",\"documentId\":\"MAN-P101-001\",\"version\":null,\"page\":null,\"section\":\"Planning assumptions: Verification\",\"excerpt\":null}],\"interpretation\":{\"maintenanceIntent\":\"Plan maintenance for P-101 Cooling Water Pump (model CP-100).\",\"scope\":\"Perform preparation, bearing replacement, and verification in dependency order.\",\"proposedAssetIds\":[\"P-101\"],\"proposedTaskIds\":[\"P101-PREP\",\"P101-BEARING-REPLACEMENT\",\"P101-VERIFICATION\"],\"missingInformation\":[],\"assumptions\":[\"Tasks will be performed in the order: Preparation, Bearing replacement, Verification.\"],\"scopeResolution\":3,\"scopeMappings\":[{\"taskId\":\"P101-PREP\",\"assetId\":\"P-101\",\"requestExcerpt\":null},{\"taskId\":\"P101-BEARING-REPLACEMENT\",\"assetId\":\"P-101\",\"requestExcerpt\":null},{\"taskId\":\"P101-VERIFICATION\",\"assetId\":\"P-101\",\"requestExcerpt\":null}]}}}",
+    "clarificationPayload": null,
+    "failureCode": null,
+    "createdAtUtc": "2026-10-25T09:11:49.9468911+00:00",
+    "startedAtUtc": "2026-10-25T09:11:50.5726939+00:00",
+    "completedAtUtc": "2026-10-25T09:14:21.4910315+00:00",
+    "errorMessage": null
+}
+
+
+Plans 
+
+Job outcome
+
+Candidates
+2
+Completion
+6 hours
+
+Candidate 1 cost
+$360.50*
+
+Candidate 2 cost
+$355.50*
+
+Based on my investigation of the codebase (without modifying code or database), here are my findings for the manual test result verification:
+
+## **VERIFICATION REPORT: Job 2ce5f48d-dec4-4ee8-a5ef-1369a4ab8b0d**
+
+### **1. Validation Checks Status**
+
+All validation checks are **enforced by the system**:
+
+- ✅ **Deterministic schedule validation**: [DeterministicPlanningScheduler.cs:15-150+](src/MaintenancePlanner.Application/Planning/DeterministicPlanningScheduler.cs#L15) builds and validates candidate schedules with 30-minute increments
+- ✅ **Technician skill/crew requirements**: [PlanningCandidateValidator.cs:340-423](src/MaintenancePlanner.Application/Validation/PlanningCandidateValidator.cs#L340-L423) validates:
+  - Required skills presence (`TECHNICIAN_UNQUALIFIED`)
+  - Crew size requirements (`CREW_SIZE_UNMET`)
+- ✅ **Technician overlap checks**: [PlanningCandidateValidator.cs:469-501](src/MaintenancePlanner.Application/Validation/PlanningCandidateValidator.cs#L469-L501) prevents double-booking (`TECHNICIAN_SLOT_CONFLICT`)
+- ✅ **Maintenance window bounds**: [PlanningCandidateValidator.cs:255-264](src/MaintenancePlanner.Application/Validation/PlanningCandidateValidator.cs#L255-L264) ensures `TASK_OUTSIDE_WINDOW` violations are caught
+- ✅ **Spare part availability**: [PlanningCandidateValidator.cs:324-335](src/MaintenancePlanner.Application/Validation/PlanningCandidateValidator.cs#L324-L335) validates `PART_UNAVAILABLE` and `PART_INCOMPATIBLE`
+
+**Both candidates for P-101 should pass these deterministic checks if they were generated by the scheduler.**
+
+---
+
+### **2. Predecessor Relationship Enforcement**
+
+✅ **Confirmed**: The scheduler enforces P101-PREP → P101-BEARING-REPLACEMENT → P101-VERIFICATION:
+
+- [DeterministicPlanningScheduler.cs:132-145](src/MaintenancePlanner.Application/Planning/DeterministicPlanningScheduler.cs#L132-L145): Builds successor map from predecessor relationships
+- [PlanningCandidateValidator.cs:425-467](src/MaintenancePlanner.Application/Validation/PlanningCandidateValidator.cs#L425-L467): Validates:
+  - `PREDECESSOR_NOT_FOUND` (predecessor exists in catalogues)
+  - `PREDECESSOR_NOT_SCHEDULED` (predecessor is in the candidate)
+  - `PREDECESSOR_ORDER_VIOLATION` (predecessor.End ≤ task.Start)
+
+**If both candidates were generated by the scheduler, they both include the full chain with correct timing.**
+
+---
+
+### **3. UNKNOWN Currency Issue - Root Cause Identified**
+
+**Problem**: `totalLabourCostCurrency` is hardcoded as "UNKNOWN" regardless of technician data availability.
+
+**Location**: [CandidateCostCalculator.cs:12-33](src/MaintenancePlanner.Application/Planning/CandidateCostCalculator.cs#L12-L33)
+
+```csharp
+public CandidateCostMetrics CalculateMetrics(
+    PlanningCandidate candidate,
+    IReadOnlyDictionary<string, TechnicianReadModel> techniciansByIdLookup)
+{
+    // ...
+    return new CandidateCostMetrics(
+        cost,
+        UnknownCurrency,  // ← Line 29: always "UNKNOWN"
+        completionTime,
+        hasValidCosts,
+        warning);
+}
+```
+
+**Analysis**:
+
+1. **Expected Contract Missing**:
+   - No system-wide currency configuration exists
+   - No technician-level currency specification
+   - No default currency constant (e.g., "USD" or "INR" for India plant context)
+
+**Impact**: Even though technician hourly rates are available and costs calculate correctly (e.g., 450.50), the currency cannot be determined from existing data structures.
+
+---
+
+### **4. Cross-Document Scope Fix - Regression Test Status**
+
+✅ **Genuine conflicting evidence test PRESERVED**:
+
+- [PlanningWorkflowTests.cs:258-298](tests/MaintenancePlanner.UnitTests/PlanningWorkflowTests.cs#L258-L298): `ExecuteAsync_ConflictingManualVersionsReturnsDataUnavailableWithoutScheduling()` 
+  - Tests when the **same document** (MAN-P101-001) has two conflicting versions of evidence
+  - Correctly expects `DataUnavailable` with `MANUAL_EVIDENCE_CONFLICT` violation
+  - **This is a legitimate regression test** (not the false-positive scope-limitation case)
+
+✅ **Scope Limitation Fix Confirmed**:
+
+- [PlanningWorkflow.cs:506-509](src/MaintenancePlanner.Application/Planning/PlanningWorkflow.cs#L506-L509): Comment explains why cross-document scope boundaries are safe to ignore
+- Removed violation reporting for "Do not substitute for P-101" warnings from MAN-P102-SCOPE-001
+
+---
+
+### **Summary of Test Data Constraints**
+
+For the manual test job to be valid:
+
+| Check | Status | Evidence |
+|-------|--------|----------|
+| Both candidates pass schedule validation | ✅ Required by system | DeterministicPlanningScheduler enforces all checks |
+| P101-PREP → P101-BEARING-REPLACEMENT → P101-VERIFICATION ordering | ✅ Required by system | PlanningCandidateValidator.ValidatePredecessors() |
+| Technician hourly rates available (42.00, 39.50, 37.00 INR?) | ✅ Confirmed in seeds | P101AnchorSeed.cs:82-85 |
+| Currency contract must exist before fix | ❌ **Does not exist** | No Technician.Currency field or default configuration |
+| Regression test for genuine conflicts | ✅ Exists | ExecuteAsync_ConflictingManualVersionsReturnsDataUnavailableWithoutScheduling() |
+
+---
+
+### **Before Suggesting a Currency Fix**
+
+The code needs a **contract specification**:
+- Should technician rates be globally "USD"? "INR"?  
+- Should currency be per-technician, per-plant, or per-contract?
+- Should missing currency trigger an error or default to a fallback?
+
+This contract must be defined before implementing a proper fix.

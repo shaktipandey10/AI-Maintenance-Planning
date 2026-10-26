@@ -1,0 +1,52 @@
+AT10:
+
+Perfect! **All 179 tests PASS** — 116 unit tests + 63 integration tests (including new AT10 tests). **Zero production code changes**.
+
+## AT10 Complete — Unit + Integration Tests
+
+### Test Coverage Summary
+
+| Test Suite | Count | Duration | Status |
+|---|---|---|---|
+| **AT10 Unit Tests** | 8 | 641 ms | ✅ PASS |
+| **AT10 Integration Tests** | 5 | 5 sec | ✅ PASS |
+| **Other Unit Tests** | 108 | — | ✅ PASS |
+| **Other Integration Tests** | 58 | — | ✅ PASS |
+| **TOTAL** | **179** | **13 sec** | ✅ PASS |
+
+### AT10 Unit Tests (tests/MaintenancePlanner.UnitTests/AT10ErrorHandlingTests.cs)
+
+1. ✅ `AT10_ModelTimeoutProducesDistinctOllamaTimeoutFailure` — Verifies OLLAMA_TIMEOUT with transient flag
+2. ✅ `AT10_MalformedModelOutputProducesDistinctOllamaInvalidOutputFailure` — Verifies OLLAMA_INVALID_OUTPUT non-transient
+3. ✅ `AT10_InventoryDataUnavailableProducesDataUnavailableOutcome` — Verifies DataUnavailable outcome
+4. ✅ `AT10_InsufficientInventoryProducesInfeasibleOutcome` — Verifies Infeasible outcome (distinct from DataUnavailable)
+5. ✅ `AT10_InvalidInputOutcomeIndicatesFailedPlan` — Verifies InvalidInput blocks approval
+6. ✅ `AT10_ClarificationRequiredOutcomeIndicatesIncompletePlan` — Verifies ClarificationRequired blocks approval
+7. ✅ `AT10_ExceptionResultTypeIndicatesProcessingError` — Verifies exception handling
+8. ✅ `AT10_NullWorkflowProducesDistinctFailure` — Verifies PLANNING_WORKFLOW_UNAVAILABLE
+
+### AT10 Integration Tests (tests/MaintenancePlanner.IntegrationTests/AT10ErrorHandlingIntegrationTests.cs)
+
+1. ✅ `AT10_FailedJobResultCannotBeApproved` — End-to-end: InvalidInput result blocks approval
+2. ✅ `AT10_InfeasibleResultCannotBeApproved` — End-to-end: Infeasible result blocks approval
+3. ✅ `AT10_DataUnavailableResultCannotBeApproved` — End-to-end: DataUnavailable result blocks approval
+4. ✅ `AT10_ClarificationRequiredResultCannotBeApproved` — End-to-end: ClarificationRequired result blocks approval
+5. ✅ `AT10_JobStateConsistentAfterFailure` — Verifies job state unchanged after approval rejection, no drafts created
+
+### Files Changed
+
+```
+✅ tests/MaintenancePlanner.UnitTests/AT10ErrorHandlingTests.cs (220 lines)
+✅ tests/MaintenancePlanner.IntegrationTests/AT10ErrorHandlingIntegrationTests.cs (362 lines)
+❌ No production code changes
+```
+
+### AT10 Acceptance Criteria — All Verified
+
+| Criterion | Unit Test | Integration Test | Status |
+|---|---|---|---|
+| **Distinct timeout failure** | ✅ OLLAMA_TIMEOUT | — | ✅ |
+| **Distinct malformed failure** | ✅ OLLAMA_INVALID_OUTPUT | — | ✅ |
+| **Inventory distinguished** | ✅ DataUnavailable vs Infeasible | — | ✅ |
+| **Failed job blocks approval** | ✅ Multiple outcomes | ✅ All 4 result types | ✅ |
+| **State consistency** | — | ✅ Job state verified | ✅ |

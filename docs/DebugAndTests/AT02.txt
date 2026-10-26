@@ -1,0 +1,167 @@
+Perfect! All AT02 tests pass. Let me create a comprehensive AT02 audit report:
+
+## AT02 Audit Report: Clarification for Missing Window or Scope
+
+**Audit Date**: 2026-10-24  
+**Status**: ✅ IMPLEMENTATION VERIFIED
+
+---
+
+### AT02 Requirement
+
+From requirementsforpoc.md (line 92):
+> **AT02**: Clarification: omit the window or scope. Ask for the missing information before treating a plan as ready for approval.
+
+**Acceptance Criteria**:
+1. When maintenance window is omitted → system returns clarification request (not invented assumptions)
+2. When maintenance scope (tasks) is omitted → system returns clarification request
+3. Clarification questions are exposed in result
+4. Job with clarification outcome cannot be approved
+
+---
+
+### Implementation Structure
+
+**Clarification Workflow**:
+
+1. **Request Validation** ([DeterministicPlanningScheduler.cs:14-40](src/MaintenancePlanner.Application/Planning/DeterministicPlanningScheduler.cs#L14-L40)):
+   - Missing AssetIds → `Clarification("Select at least one asset before scheduling.")`
+   - Missing RequiredTaskIds (empty scope) → `Clarification("Confirm the required maintenance task scope before scheduling.")`
+   - Missing MaintenanceWindowId → `Clarification("Select a maintenance window before scheduling.")`
+
+2. **Result Model** ([PlanningContracts.cs:77-81](src/MaintenancePlanner.Application/Planning/PlanningContracts.cs#L77-L81)):
+   - `PlanningClarificationRequiredResult` with `Questions` field
+   - `PlanningScheduleOutcome.ClarificationRequired` enum value
+   - `PlanningScheduleResult.ClarificationQuestions` for API exposure
+
+3. **Approval Workflow Guard** ([AT10ErrorHandlingIntegrationTests.cs:203-253](tests/MaintenancePlanner.IntegrationTests/AT10ErrorHandlingIntegrationTests.cs#L203-L253)):
+   - ClarificationRequired jobs cannot be approved
+   - Approval returns `Failed` status
+
+---
+
+### Test Coverage
+
+**Unit Tests (DeterministicPlanningSchedulerTests)**:
+
+| Test | Covers | Status |
+|------|--------|--------|
+| `ScheduleAsync_MissingAndUnknownScopeOrWindow_ReturnsStructuredOutcomes` | Missing scope + missing window + unknown task validation | ✅ PASS |
+
+**Integration Tests**:
+
+| Test | Covers | Status |
+|------|--------|--------|
+| `AT10_ClarificationRequiredResultCannotBeApproved` | Job approval guard on clarification results | ✅ PASS |
+| `ApiSubmission_RunsOllamaWorkflowAndPersistsClarificationOutcomeForAmbiguousScope` | Clarification persistence through full job workflow | ✅ PASS |
+
+---
+
+### Test Command and Output
+
+```bash
+# Unit test: Missing scope/window detection
+dotnet test tests/MaintenancePlanner.UnitTests/MaintenancePlanner.UnitTests.csproj \
+  --filter "ScheduleAsync_MissingAndUnknownScopeOrWindow_ReturnsStructuredOutcomes" -v minimal
+
+✅ Passed! - Failed: 0, Passed: 1, Total: 1, Duration: 310 ms
+```
+
+```bash
+# Integration test: Clarification approval guard
+dotnet test tests/MaintenancePlanner.IntegrationTests/MaintenancePlanner.IntegrationTests.csproj \
+  --filter "AT10_ClarificationRequiredResultCannotBeApproved" -v minimal
+
+✅ Passed! - Failed: 0, Passed: 1, Total: 1, Duration: 5 s
+```
+
+```bash
+# Integration test: Ollama workflow clarification
+dotnet test tests/MaintenancePlanner.IntegrationTests/MaintenancePlanner.IntegrationTests.csproj \
+  --filter "ApiSubmission_RunsOllamaWorkflowAndPersistsClarificationOutcomeForAmbiguousScope" -v minimal
+
+✅ Passed! - Failed: 0, Passed: 1, Total: 1, Duration: 5 s
+```
+
+---
+
+### Detailed Test Verification
+
+**Test 1: Missing Scope Detection**
+```csharp
+var missingScope = await fixture.Scheduler.ScheduleAsync(
+    new PlanningScheduleRequest(["P-101"], "MW-P101-BASELINE-20261024", []),
+    CancellationToken.None);
+
+Assert.Equal(PlanningScheduleOutcome.ClarificationRequired, missingScope.Outcome);
+Assert.NotEmpty(missingScope.ClarificationQuestions);
+```
+✅ Empty RequiredTaskIds returns ClarificationRequired with questions
+
+**Test 2: Missing Window Detection**
+```csharp
+var missingWindow = await fixture.Scheduler.ScheduleAsync(
+    new PlanningScheduleRequest(["P-101"], null, ["P101-PREP"]),
+    CancellationToken.None);
+
+Assert.Equal(PlanningScheduleOutcome.ClarificationRequired, missingWindow.Outcome);
+```
+✅ Null MaintenanceWindowId returns ClarificationRequired
+
+**Test 3: Clarification Job Approval Guard**
+```csharp
+var clarificationPayload = """
+{
+  "outcome": "ClarificationRequired",
+  "result": {
+    "clarificationQuestions": ["Which bearing model is required?"],
+    ...
+  }
+}
+""";
+// Job persisted with this payload
+var approvalResult = await approvalService.ApproveDraftAsync(jobId, CancellationToken.None);
+
+Assert.False(approvalResult.Succeeded);  // ✅ Cannot approve clarification
+```
+
+---
+
+### AT02 Criteria Met
+
+| Criterion | Implementation | Evidence |
+|-----------|---|----------|
+| **Missing window → clarification** | ✅ Explicit null check returns `Clarification("Select a maintenance window...")` | [Line 37-40](src/MaintenancePlanner.Application/Planning/DeterministicPlanningScheduler.cs#L37-L40) |
+| **Missing scope → clarification** | ✅ Empty RequiredTaskIds returns `Clarification("Confirm the required maintenance task scope...")` | [Line 32-35](src/MaintenancePlanner.Application/Planning/DeterministicPlanningScheduler.cs#L32-L35) |
+| **No invented assumptions** | ✅ Clarification returns empty candidates/violations; questions field populated | [Clarification method](src/MaintenancePlanner.Application/Planning/DeterministicPlanningScheduler.cs#L677-L678) |
+| **Clarification exposed in API** | ✅ `PlanningScheduleResult.ClarificationQuestions` field | [PlanningContracts.cs:147](src/MaintenancePlanner.Application/Planning/PlanningContracts.cs#L147) |
+| **Cannot approve clarification** | ✅ Approval service validates outcome ≠ ClarificationRequired | [AT10 test](tests/MaintenancePlanner.IntegrationTests/AT10ErrorHandlingIntegrationTests.cs#L203) |
+
+---
+
+### Key Findings
+
+1. ✅ **Clear Clarification Messages**: Questions are human-readable and specific
+   - "Select at least one asset before scheduling."
+   - "Confirm the required maintenance task scope before scheduling."
+   - "Select a maintenance window before scheduling."
+
+2. ✅ **No Silent Assumptions**: Missing fields do NOT trigger invented defaults or fallback scheduling
+
+3. ✅ **Structured Result**: ClarificationRequired outcome with empty candidates ensures downstream code cannot treat it as a plan
+
+4. ✅ **Approval Workflow Integration**: Jobs with clarification cannot be approved, forcing clarification before proceeding
+
+5. ✅ **Test Coverage**: Both unit (scheduler logic) and integration (job workflow) tests verify behavior
+
+---
+
+### Conclusion
+
+**AT02 Status**: ✅ **FULLY IMPLEMENTED AND TESTED**
+
+The system correctly implements clarification requests for missing mandatory information (window or scope), ensuring that:
+- Missing fields are detected before planning
+- Clear clarification questions are returned to the user
+- No invented assumptions contaminate the result
+- Clarification outcomes cannot proceed to approval

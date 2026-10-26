@@ -1,0 +1,158 @@
+{
+  "fixtureId": "P101-ANCHOR-2026-10-24",
+  "description": "Fictional P-101 bearing-replacement anchor fixture for repeatable planning demonstrations.",
+  "timeZoneId": "Asia/Kolkata",
+  "timeGranularityMinutes": 30,
+  "assets": [
+    {
+      "id": "P-101",
+      "plantId": "PLANT-01",
+      "name": "Cooling Water Pump P-101",
+      "model": "CP-100",
+      "priority": 1
+    }
+  ],
+  "windows": [
+    {
+      "id": "MW-P101-BASELINE-20261024",
+      "name": "P-101 Saturday baseline window",
+      "start": "2026-10-24T08:00:00+05:30",
+      "end": "2026-10-24T16:00:00+05:30",
+      "timeZoneId": "Asia/Kolkata"
+    },
+    {
+      "id": "MW-P101-REDUCED-20261024",
+      "name": "P-101 Saturday reduced window",
+      "start": "2026-10-24T08:00:00+05:30",
+      "end": "2026-10-24T12:00:00+05:30",
+      "timeZoneId": "Asia/Kolkata"
+    }
+  ],
+  "technicians": [
+    {
+      "id": "TECH-001",
+      "name": "Asha Rao",
+      "hourlyRate": 42.00,
+      "technicalSkills": ["MECHANICAL", "ROTATING-EQUIPMENT"],
+      "availability": [
+        {
+          "availableFrom": "2026-10-24T08:00:00+05:30",
+          "availableTo": "2026-10-24T16:00:00+05:30"
+        }
+      ]
+    },
+    {
+      "id": "TECH-002",
+      "name": "Kabir Shah",
+      "hourlyRate": 39.50,
+      "technicalSkills": ["MECHANICAL", "ROTATING-EQUIPMENT"],
+      "availability": [
+        {
+          "availableFrom": "2026-10-24T08:00:00+05:30",
+          "availableTo": "2026-10-24T16:00:00+05:30"
+        }
+      ]
+    },
+    {
+      "id": "TECH-003",
+      "name": "Meera Iyer",
+      "hourlyRate": 37.00,
+      "technicalSkills": ["MECHANICAL", "INSTRUMENTATION"],
+      "availability": [
+        {
+          "availableFrom": "2026-10-24T08:00:00+05:30",
+          "availableTo": "2026-10-24T16:00:00+05:30"
+        }
+      ]
+    }
+  ],
+  "parts": [
+    {
+      "id": "BR-101",
+      "name": "P-101 replacement bearing",
+      "unit": "each",
+      "onHandQuantity": 1,
+      "reservedQuantity": 0,
+      "compatibleAssetIds": ["P-101"]
+    }
+  ],
+  "tasks": [
+    {
+      "id": "P101-PREP",
+      "assetId": "P-101",
+      "name": "Preparation",
+      "durationMinutes": 60,
+      "requiredSkills": ["MECHANICAL"],
+      "requiredCrewSize": 1,
+      "requiredPartId": null,
+      "requiredPartQuantity": 0,
+      "predecessorTaskId": null,
+      "sourceDocumentId": "MAN-P101-001",
+      "sourceSection": "Planning assumptions: Preparation"
+    },
+    {
+      "id": "P101-BEARING-REPLACEMENT",
+      "assetId": "P-101",
+      "name": "Bearing replacement",
+      "durationMinutes": 180,
+      "requiredSkills": ["ROTATING-EQUIPMENT"],
+      "requiredCrewSize": 2,
+      "requiredPartId": "BR-101",
+      "requiredPartQuantity": 1,
+      "predecessorTaskId": "P101-PREP",
+      "sourceDocumentId": "MAN-P101-001",
+      "sourceSection": "Planning assumptions: Bearing replacement"
+    },
+    {
+      "id": "P101-VERIFICATION",
+      "assetId": "P-101",
+      "name": "Verification",
+      "durationMinutes": 120,
+      "requiredSkills": ["INSTRUMENTATION"],
+      "requiredCrewSize": 1,
+      "requiredPartId": null,
+      "requiredPartQuantity": 0,
+      "predecessorTaskId": "P101-BEARING-REPLACEMENT",
+      "sourceDocumentId": "MAN-P101-001",
+      "sourceSection": "Planning assumptions: Verification"
+    }
+  ],
+  "scenarios": {
+    "baseline": {
+      "requestId": "REQ-P101-FULL-REPLACEMENT",
+      "scope": "Full bearing replacement: preparation, bearing replacement, then verification.",
+      "assetIds": ["P-101"],
+      "windowId": "MW-P101-BASELINE-20261024",
+      "partInventory": [{ "partId": "BR-101", "onHandQuantity": 1 }],
+      "expected": {
+        "scopeTaskIds": ["P101-PREP", "P101-BEARING-REPLACEMENT", "P101-VERIFICATION"],
+        "elapsedTaskMinutes": 360,
+        "feasibleWindowMinutes": 480,
+        "requiredBearingQuantity": 1,
+        "availableBearingQuantity": 1,
+        "expectedFeasible": true
+      }
+    },
+    "changedConstraints": {
+      "requestId": "REQ-P101-FULL-REPLACEMENT-CHANGED",
+      "scope": "Full bearing replacement: preparation, bearing replacement, then verification.",
+      "assetIds": ["P-101"],
+      "windowId": "MW-P101-REDUCED-20261024",
+      "partInventory": [{ "partId": "BR-101", "onHandQuantity": 0 }],
+      "expected": {
+        "expectedFeasible": false,
+        "violations": [
+          "BR-101 is unavailable; the replacement task requires one bearing.",
+          "The sequential task chain requires 360 minutes but the window provides 240 minutes."
+        ],
+        "inspectionOnlySubstitutionAllowed": false
+      }
+    }
+  },
+  "assumptions": [
+    "All data is fictional and is a planning fixture, not an equipment repair procedure.",
+    "Task durations and crew sizes are exercise assumptions; preparation and verification each use one qualified technician.",
+    "The replacement task requires two technicians qualified in ROTATING-EQUIPMENT.",
+    "The full task chain is sequential and uses a 30-minute planning granularity."
+  ]
+}

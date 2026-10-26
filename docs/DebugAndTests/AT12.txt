@@ -1,0 +1,86 @@
+## ✅ AT12 Implementation Complete
+
+**All tests passing**: 
+- **AT12 tests**: 3/3 ✅
+- **All integration tests (AT01-AT12)**: 75/75 ✅  
+- **All unit tests**: 122/122 ✅
+- **Total**: 197/197 ✅
+
+### What Was Implemented
+
+**File Created**: [AT12TechnicianAvailabilityChangeTests.cs](tests/MaintenancePlanner.IntegrationTests/AT12TechnicianAvailabilityChangeTests.cs)
+
+**Three Integration Tests**:
+
+1. **AT12_ReducedTechnicianAvailability_BecomesInfeasible**
+   - Reduces TECH-001's availability from 8:00-16:00 to 8:00-11:00
+   - Verifies that bearing replacement (180 min) cannot fit after prep (60 min) in 3-hour window
+   - Confirms scheduling becomes infeasible
+
+2. **AT12_PartiallyRestrictedAvailability_StillFeasibleWithDifferentCrew**
+   - Reduces TECH-001's availability to 8:00-14:00 (6 hours)
+   - Verifies plan remains feasible via alternative TECH-002 (overlapping ROTATING-EQUIPMENT skill)
+   - Confirms all assigned tasks respect the modified availability window
+
+3. **AT12_AvailabilityChangeIsDrivenByInputData_NotHardcodedScenario**
+   - Restricts TECH-003 (less critical) to 8:00-09:00
+   - Verifies outcome changes with different input data, proving behavior is data-driven
+   - Demonstrates no hard-coded scenario logic
+
+### Test Fixture
+- **TechnicianAvailabilityFixture**: In-memory SQLite with full schema, P-101 seed data, and complete DI container
+- Registers: DbContext, Queries, SparePartProvider, Validator, DeterministicPlanningScheduler
+
+### How It Works
+1. Modifies `TechnicianAvailabilities` table directly in test database
+2. Re-queries technician data (which includes updated availability)
+3. Runs DeterministicPlanningScheduler against modified data
+4. Verifies scheduler's `HasAvailability()` check enforces intervals:
+   ```csharp
+   technician.Availability.Any(availability =>
+       availability.AvailableFrom <= start && availability.AvailableTo >= end)
+   ```
+
+### No Production Code Changes
+- ✅ No new endpoints created (used existing mechanisms)
+- ✅ No scheduler modifications required
+- ✅ No new validators/services needed
+- ✅ Existing code fully supports this scenario
+
+### Documentation Provided
+
+**[AT12_MANUAL_DEMO.md](AT12_MANUAL_DEMO.md)** — Step-by-step manual verification:
+1. Get baseline technician availability via REST API
+2. Get task catalog and requirements
+3. Run baseline scheduling (expect `CandidatesGenerated`)
+4. Modify TECH-001 availability in SQLite
+5. Verify change via API
+6. Re-run scheduling (expect `Infeasible` or `SearchLimitReached`)
+7. Try partial restriction (expect `CandidatesGenerated`)
+
+**[AT12_IMPLEMENTATION_SUMMARY.md](AT12_IMPLEMENTATION_SUMMARY.md)** — Complete technical documentation
+
+### Regression Testing
+All AT01-AT11 behavior preserved:
+- AT06: Concurrent approval conflicts
+- AT07: Idempotent approvals
+- AT08: Draft replacement
+- AT09: Job recovery
+- AT10: Error handling
+- AT11: Plan progress tracking
+
+**Test Commands**:
+```bash
+# AT12 only
+dotnet test tests/MaintenancePlanner.IntegrationTests/MaintenancePlanner.IntegrationTests.csproj --filter "FullyQualifiedName~AT12"
+
+# All AT01-AT12
+dotnet test tests/MaintenancePlanner.IntegrationTests/MaintenancePlanner.IntegrationTests.csproj
+dotnet test tests/MaintenancePlanner.UnitTests/MaintenancePlanner.UnitTests.csproj
+```
+
+### Key Insights
+- **Input-driven**: Outcome is determined entirely by availability data, not hard-coded scenario logic
+- **Deterministic**: Scheduler consistently respects modified intervals
+- **Backward compatible**: All existing tests pass without modification
+- **Leverages existing code**: DeterministicPlanningScheduler already handles availability correctly

@@ -1,0 +1,144 @@
+Perfect! Now let me create a final verification summary:
+
+## AT03 Final Verification Report
+
+### ✓ Verification Status: COMPLETE (Unit/Regression Tests)
+
+---
+
+### 1. **Outcome Mapping Verification** ✓
+
+**Finding**: DataUnavailable is the correct outcome for evidence conflicts.
+
+**Evidence**:
+- [PlanningWorkflow.cs:381-382](src/MaintenancePlanner.Application/Planning/PlanningWorkflow.cs#L381-L382): When `evidenceResult.Violations.Count > 0`, workflow returns `DataUnavailableResult` 
+- This **prevents scheduling from being attempted** (line 307 scheduler call is never reached)
+- Matches AT03 requirement: "prevent a falsely feasible candidate based on the wrong manual"
+- Consistent with existing pattern: MANUAL_EVIDENCE_UNAVAILABLE and MANUAL_EVIDENCE_CONFLICT violations both return DataUnavailable
+
+---
+
+### 2. **P-102 Conflict Detection** ✓
+
+**Test**: `ExecuteAsync_CrossDocumentConflictingEvidenceDetected_ReturnsDataUnavailableWithViolation()`
+
+**Results**:
+- ✓ P-102 "Do not substitute" statement detected
+- ✓ Violation code: `MANUAL_EVIDENCE_CONFLICT_CROSS_DOCUMENT`
+- ✓ Message includes: conflicting document ID + excerpt
+- ✓ Prevents scheduling entirely (returns DataUnavailable)
+
+---
+
+### 3. **False Conflict Prevention** ✓
+
+**Test**: `ExecuteAsync_WithoutCrossDocumentConflict_UnrelatedEvidenceDoesNotFlagViolation()`
+
+**Results**:
+- ✓ When P-102 evidence not available: normal candidates generated
+- ✓ No false MANUAL_EVIDENCE_CONFLICT_CROSS_DOCUMENT violations
+- ✓ Fixture scoping works correctly (conflict only flagged when evidence from different doc is actually retrieved)
+
+---
+
+### 4. **No False Positive Candidates** ✓
+
+**Mechanism**: 
+- Conflict violation → DataUnavailableResult → Scheduling NOT attempted → No candidates generated
+
+**Verified By**:
+- Unit test fixture: `VerifyNoResourcePlanningQueries()` (like MANUAL_EVIDENCE_UNAVAILABLE tests)
+- Integration test AT01: Still generates proper candidates when no conflicts
+
+---
+
+### 5. **Violation Structure & Details** ✓
+
+**Format**: `"Evidence from document {conflictingDocId} contains explicit conflict warning for task {taskId}: '{excerpt}'"`
+
+**Example Message**:
+```
+Evidence from document MAN-P102-SCOPE-001 contains explicit conflict warning for task P101-BEARING-REPLACEMENT: 'Do not substitute this scope for the P-101 bearing-replacement scope'
+```
+
+**Fields Present**:
+- Code: `MANUAL_EVIDENCE_CONFLICT_CROSS_DOCUMENT`
+- TaskId: `P101-BEARING-REPLACEMENT`
+- ResourceId: `MAN-P101-001` (requested document)
+- Message: Contains conflicting document + excerpt
+
+---
+
+### 6. **No Breaking Changes to P-101 Baseline** ✓
+
+**AT01 Acceptance Tests**: 
+```
+Passed: 3/3
+- AT01_FiveAssets_GeneratesTwoDistinctFeasibleAlternatives ✓
+- AT01_AllRequestedTasksAreScheduled ✓
+- AT01_EvidenceReferencesContainSourceDocumentDetails ✓
+```
+
+**PlanningWorkflowTests Regression**:
+```
+Passed: 20/20 (all existing + 2 new AT03)
+- All evidence-related tests pass ✓
+- All interpretation tests pass ✓
+- All clarification/invalid tests pass ✓
+```
+
+---
+
+### 7. **Test Execution Summary**
+
+```powershell
+# Unit Tests (including AT03)
+dotnet test tests/MaintenancePlanner.UnitTests/MaintenancePlanner.UnitTests.csproj -v minimal
+Passed: 124/124, Duration: 2s ✓
+
+# PlanningWorkflow Tests (core AT03)
+dotnet test tests/MaintenancePlanner.UnitTests/MaintenancePlanner.UnitTests.csproj -v minimal --filter "PlanningWorkflowTests"
+Passed: 20/20, Duration: 831ms ✓
+
+# AT01 Acceptance Tests (regression)
+dotnet test tests/MaintenancePlanner.IntegrationTests/MaintenancePlanner.IntegrationTests.csproj -v minimal --filter "AT01"
+Passed: 3/3, Duration: 6s ✓
+```
+
+---
+
+### 8. **Changes Made**
+
+| File | Changes | Status |
+|------|---------|--------|
+| [PlanningWorkflow.cs:445-522](src/MaintenancePlanner.Application/Planning/PlanningWorkflow.cs#L445-L522) | Added second SearchAsync + conflict detection | ✓ Complete |
+| [PlanningWorkflowTests.cs:550-592](tests/MaintenancePlanner.UnitTests/PlanningWorkflowTests.cs#L550-L592) | 2 new unit tests + mock update | ✓ Complete |
+| [IsExplicitConflict helper](src/MaintenancePlanner.Application/Planning/PlanningWorkflow.cs#L515-L522) | Conflict keyword detection | ✓ Complete |
+
+---
+
+### 9. **Gaps & Unverified Aspects**
+
+The following require Ollama integration or HTTP API testing (per user scope: "Do not run Ollama integration tests unless necessary"):
+
+| Aspect | Status | Why Deferred |
+|--------|--------|-------------|
+| Job result persistence (ResultPayload.Violations) | Requires Ollama workflow execution | Out of unit test scope |
+| API response via GET /api/planning-jobs/{id} | Requires HTTP API + job completion | Requires Ollama or full mock |
+| JSON serialization round-trip | Requires job persistence layer | Requires Ollama workflow |
+
+**These can be verified with `OllamaPlanningJobIntegrationTests` when Ollama is available**, but unit tests prove the core functionality works correctly.
+
+---
+
+### **Final Status: AT03 IMPLEMENTATION VERIFIED ✓**
+
+✓ Cross-document conflict detection works  
+✓ P-102 "do not substitute" warning detected  
+✓ Prevents false feasible candidates  
+✓ Returns proper violation structure  
+✓ No false positives  
+✓ P-101 baseline preserved  
+✓ All unit tests pass (124 total)  
+✓ No regressions  
+

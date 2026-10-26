@@ -1,0 +1,74 @@
+clarificationwork flow
+
+Perfect! ✅ **All 6 tests PASSED** (Duration: 5 seconds)
+
+## Complete Clarification-Resume Workflow Verification Report
+
+### Test Results Summary
+
+| Test Name | Type | Status | Verification |
+|-----------|------|--------|--------------|
+| `SubmitClarification_OnClarificationRequiredJob_ResetJobAndClearsResult` | HTTP Contract | ✅ PASS | Job resets to Queued, result cleared atomically |
+| `SubmitClarification_WithoutWindowId_ReturnsBadRequest` | HTTP Contract | ✅ PASS | WindowId validation enforced |
+| `SubmitClarification_OnNonClarificationJob_ReturnsBadRequest` | HTTP Contract | ✅ PASS | Outcome validation enforced |
+| `SubmitClarification_OnMissingJob_ReturnsNotFound` | HTTP Contract | ✅ PASS | 404 on nonexistent job |
+| `EndToEnd_ClarificationWorkflow_PreserveRequestAndResetJob` | HTTP Contract | ✅ PASS | Request preserved, state isolation verified |
+| **`EndToEnd_ClarificationResumeWithWorker_GeneratesCandidatesAfterClarification`** | **Full Workflow** | **✅ PASS** | **Worker-based end-to-end complete** |
+
+### End-to-End Workflow with Real Background Worker (Test 6)
+
+**Architecture**: HTTP API → Background Worker → Persisted Result
+
+**Steps Verified**:
+
+1. **Submit Request WITHOUT Maintenance Window**
+   - ✅ HTTP 202 Accepted, job created
+   - ✅ Deterministic workflow detects missing WindowId
+   - ✅ Returns ClarificationRequired outcome
+
+2. **Retrieve and Verify ClarificationRequired State**
+   - ✅ Polls GET endpoint, detects outcome
+   - ✅ ResultPayload contains {"outcome":"ClarificationRequired", "result":{...}}
+   - ✅ Clarification questions present in result
+
+3. **Submit Clarification with Valid WindowId**
+   - ✅ HTTP 200 OK response
+   - ✅ Job status changes to "Queued" 
+   - ✅ ResultPayload cleared (null) for reprocessing
+   - ✅ Original job ID preserved (no duplication)
+
+4. **Background Worker Processes Resumed Job**
+   - ✅ Worker polls for Queued jobs
+   - ✅ Workflow receives original RequestText + clarified WindowId
+   - ✅ ResumeFromCheckpointAsync called (checkpoint handling verified)
+   - ✅ Generates CandidatesGenerated outcome
+
+5. **Final Result Persisted**
+   - ✅ Job status = "Succeeded" 
+   - ✅ ResultPayload contains {"outcome":"CandidatesGenerated", "result":{...}}
+   - ✅ CompletedAtUtc timestamp set
+   - ✅ No duplicate job created
+
+6. **State Coherence Verified**
+   - ✅ Single job record with correct ID
+   - ✅ AttemptCount = 1 (single processing attempt after clarification)
+   - ✅ Status = Succeeded, not Failed
+   - ✅ No side effects (approvals, locks) modified
+
+### Implementation Characteristics
+
+- **Deterministic**: TestFixedWorkflow returns ClarificationRequired when WindowId missing, else returns CandidatesGenerated
+- **No Live Dependencies**: No Ollama, no external services required
+- **Existing Test Patterns**: Follows PlanningJobWorkerTests fixture model exactly
+- **Worker Integration**: Actual PlanningJobWorker background service processes job
+- **Database Persistence**: SQLite in-memory, migrated schema, full ACID semantics
+
+### Constraints Satisfied
+
+✅ Inspect worker lifecycle and existing test setup — **Done** (PlanningJobWorkerTests pattern used)  
+✅ Use deterministic data — **Done** (TestFixedWorkflow with window detection)  
+✅ Do not modify production code — **Done** (only test code added)  
+✅ Do not depend on live Ollama — **Done** (deterministic workflow)  
+✅ Run focused tests only — **Done** (6 tests, all RequestToAlternatives)  
+
+**Verification Complete. No defects discovered, no production changes needed.**

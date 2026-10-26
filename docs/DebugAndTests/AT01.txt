@@ -1,0 +1,69 @@
+Perfect! All tests passing. Let me create a summary document of the AT01 implementation:
+
+## Summary: AT01 Implementation Complete
+
+**Changed Files:**
+1. **[AT01_FiveAssetSeed.cs](src/MaintenancePlanner.Infrastructure/Seeding/AT01_FiveAssetSeed.cs)** (NEW)
+   - Five-asset fixture with P-101 through P-105
+   - 5 maintenance tasks (1 per asset, 90 minutes each)
+   - 5 spare parts (one per asset)
+   - 3 technicians with overlapping skills
+   - 1 maintenance window (8-hour baseline)
+   - Source references (manuals and sections)
+
+2. **[AT01_FiveAssetAcceptanceTests.cs](tests/MaintenancePlanner.IntegrationTests/AT01_FiveAssetAcceptanceTests.cs)** (NEW)
+   - 3 integration tests exercising the planning scheduler
+   - Verifies 2+ distinct feasible alternatives
+   - Validates all 5 assets represented
+   - Confirms calculated totals and task placements
+   - Checks evidence references with source documents
+
+**Test Results:**
+
+```bash
+# AT01 acceptance tests
+dotnet test tests/MaintenancePlanner.IntegrationTests/MaintenancePlanner.IntegrationTests.csproj \
+  --filter "AT01_FiveAssetAcceptanceTests" -v minimal
+
+✅ Passed! - Failed: 0, Passed: 3, Skipped: 0, Total: 3, Duration: 5 s
+
+# Test Coverage:
+- AT01_FiveAssets_GeneratesTwoDistinctFeasibleAlternatives ✅
+- AT01_AllRequestedTasksAreScheduled ✅
+- AT01_EvidenceReferencesContainSourceDocumentDetails ✅
+```
+
+```bash
+# Verify scheduler tests still pass
+dotnet test tests/MaintenancePlanner.UnitTests/MaintenancePlanner.UnitTests.csproj \
+  --filter "DeterministicPlanningSchedulerTests" -v minimal
+
+✅ Passed! - Failed: 0, Passed: 22, Skipped: 0, Total: 22, Duration: 760 ms
+```
+
+**AT01 Acceptance Criteria Met:**
+
+| Criterion | Status | Evidence |
+|-----------|--------|----------|
+| **Plan five assets** | ✅ | Test uses P-101 through P-105 |
+| **Use three technicians** | ✅ | TECH-001, TECH-002, TECH-003 seeded and allocated |
+| **Generate two distinct alternatives** | ✅ | Scheduler produces 2+ candidates with different policies |
+| **Calculated totals** | ✅ | Task placements with duration, crew sizes, and dates |
+| **Source references** | ✅ | Evidence references with manual IDs and sections |
+| **All 5 assets represented** | ✅ | Test verifies all assets in results |
+| **Feasible schedules** | ✅ | Candidates fit within 8-hour window constraints |
+
+**Key Findings:**
+
+1. ✅ Scheduler successfully generates multiple distinct feasible alternatives for 5-asset scenario
+2. ✅ All tasks scheduled with proper technician assignments (crew sizes respected)
+3. ✅ Task placements calculated with start/end times within maintenance window
+4. ✅ Evidence references populated with source manual and section information
+5. ✅ Deterministic scheduler core logic verified - no regressions in existing tests
+
+**Architecture Notes:**
+
+- AT01 fixture is completely separate from P101AnchorSeed (baseline unchanged)
+- Uses direct scheduler invocation, avoiding Ollama dependency as requested
+- Fixture seeding follows existing domain model patterns
+- Test assertions verify actual DTOs, not JSON strings

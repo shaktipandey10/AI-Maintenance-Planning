@@ -1,0 +1,16 @@
+Fictional planning reference: MAN-P101-001
+Asset: P-101 (model CP-100)
+Version: 1.0
+
+This document contains planning assumptions only. It is not a repair procedure and must not be used as instructions for operating on equipment.
+
+Section: Planning assumptions: Preparation
+For the P-101 full bearing-replacement scope, schedule preparation before bearing replacement. Planning estimate: 60 minutes. Crew: one technician with MECHANICAL skill.
+
+Section: Planning assumptions: Bearing replacement
+Schedule bearing replacement after preparation. Planning estimate: 180 minutes. Crew: two technicians, each with ROTATING-EQUIPMENT skill. Required part: one BR-101 bearing.
+
+Section: Planning assumptions: Verification
+Schedule verification after bearing replacement. Planning estimate: 120 minutes. Crew: one technician with INSTRUMENTATION skill.
+
+These task estimates, skills, crew sizes and part quantities are synthetic exercise assumptions supplied for the maintenance-planning proof of concept.

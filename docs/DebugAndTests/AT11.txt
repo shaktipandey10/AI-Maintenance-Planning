@@ -1,0 +1,27 @@
+Based on the test runs, here's the summary of changes:
+
+## Summary of Fixes
+
+**All three failing AT11 integration tests have been fixed:**
+
+### 1. AT11_CannotMarkCompleteOnUnapprovedDraft (Fixed)
+- **Issue**: Created a Draft with arbitrary `PlanningJobId` causing FOREIGN KEY constraint violation
+- **Fix**: Now creates a proper PlanningJob context using the fixture's `CreateApprovedDraftWithReservations()` method and adds a valid Reservation for "BR-101"
+
+### 2. AT11_ExportJson_CannotExportUnapprovedDraft (Fixed)
+- **Issue**: Created a Draft with arbitrary `PlanningJobId` causing FOREIGN KEY constraint violation  
+- **Fix**: Now creates a proper PlanningJob context using the fixture's `CreateApprovedDraftWithReservations()` method
+
+### 3. AT11_MarkTaskComplete_IsIdempotent (Fixed)
+- **Issue**: Test expected 3rd call to fail, but succeeded because fixture creates 3 reservations
+- **Fix**: Updated test to call `MarkTaskCompleteAsync` 4 times (not 3), so the 4th call correctly fails when all reservations are completed
+
+**Test Results:**
+- ✅ All 9 AT11 integration tests passing
+- ✅ All 6 AT11 unit tests passing  
+- ✅ All 72 integration tests (AT01-AT11) passing
+- ✅ All 122 unit tests passing
+- ✅ **Total: 194/194 tests passing**
+- ✅ No regressions in AT06-AT10
+
+The fixes ensure proper foreign key relationships in test fixtures, validate that unapproved drafts cannot be marked complete or exported, and verify idempotent behavior when all tasks are already completed.

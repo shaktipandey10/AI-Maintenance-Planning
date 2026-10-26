@@ -1,0 +1,10 @@
+job of AI and backend and UI
+
+
+Kaam Kaun karega?
+Natural-language request samajhna AI interpreter
+Kaunsi information missing hai, identify karna Validation + AI interpretation
+User ko form/question dikhana UI
+Spare parts aur technician availability check karna Backend services/database
+Schedule aur constraints validate karna Deterministic scheduler
+Final approval aur reservation Backend approval service

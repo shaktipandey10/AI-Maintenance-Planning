@@ -1,0 +1,68 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 6 0 R] /Count 2 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>
+endobj
+4 0 obj
+<< /Length 497 >>
+stream
+BT
+/F1 12 Tf
+1 0 0 1 50 750 Tm (Synthetic maintenance-planning reference; not an ABB document.) Tj
+1 0 0 1 50 728 Tm (Document ID: MAN-P101-PLANNING-001) Tj
+1 0 0 1 50 706 Tm (Version: 1.0) Tj
+1 0 0 1 50 684 Tm (Asset scope: P-101 \(fictional CP-100 pump\).) Tj
+1 0 0 1 50 662 Tm (Section: Preparation planning assumptions) Tj
+1 0 0 1 50 640 Tm (Schedule preparation before the bearing replacement task.) Tj
+1 0 0 1 50 618 Tm (Planning estimate: 60 minutes; crew: one MECHANICAL technician.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 8 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 629 >>
+stream
+BT
+/F1 12 Tf
+1 0 0 1 50 750 Tm (Document ID: MAN-P101-PLANNING-001) Tj
+1 0 0 1 50 728 Tm (Version: 1.0) Tj
+1 0 0 1 50 706 Tm (Section: Bearing replacement planning assumptions) Tj
+1 0 0 1 50 684 Tm (Schedule this task after preparation.) Tj
+1 0 0 1 50 662 Tm (Planning estimate: 180 minutes; crew: two ROTATING-EQUIPMENT technicians.) Tj
+1 0 0 1 50 640 Tm (Required part: one BR-101 bearing.) Tj
+1 0 0 1 50 618 Tm (Section: Verification planning assumptions) Tj
+1 0 0 1 50 596 Tm (Schedule verification after bearing replacement.) Tj
+1 0 0 1 50 574 Tm (Planning estimate: 120 minutes; crew: one INSTRUMENTATION technician.) Tj
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000127 00000 n 
+0000000253 00000 n 
+0000000801 00000 n 
+0000000871 00000 n 
+0000000997 00000 n 
+0000001677 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+1747
+%%EOF
