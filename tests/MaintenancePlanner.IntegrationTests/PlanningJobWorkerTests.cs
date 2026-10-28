@@ -208,7 +208,10 @@ public sealed class PlanningJobWorkerTests
 
                 Assert.Equal(1, interruptedProcessor.CallCount);
                 Assert.Equal(1, recoveryProcessor.CallCount);
-                Assert.Equal(2, recoveredStatus.AttemptCount);
+                // The first host stopped gracefully, which releases the job without consuming its attempt, so the
+                // recovery run is the only counted attempt. (Lease-expiry reclaim still counts an attempt: see
+                // Worker_ReclaimsExpiredRunningJobAfterRestart.)
+                Assert.Equal(1, recoveredStatus.AttemptCount);
                 Assert.Equal("""{"plan":"test-plan"}""", recoveredStatus.ResultPayload);
                 await using var dbContext = restartedHost.CreateDbContext();
                 Assert.Single(await dbContext.PlanningJobs.ToListAsync());
@@ -224,6 +227,304 @@ public sealed class PlanningJobWorkerTests
             var shmPath = $"{databasePath}-shm";
             if (File.Exists(shmPath))
                 File.Delete(shmPath);
+        }
+    }
+
+    [Fact]
+    public async Task Worker_GracefulShutdown_ReleasesJobWithoutConsumingAttempt()
+    {
+        var databasePath = NewTempDatabasePath();
+        try
+        {
+            // A 2 s lease renews about every 667 ms: long enough not to expire while the test reads the database,
+            // short enough to observe renewals before stopping.
+            var processor = new BlockingProcessor();
+            await using var host = await WorkerFixture.CreateAsync(
+                processor,
+                startWorker: false,
+                databasePath: databasePath,
+                leaseDuration: TimeSpan.FromSeconds(2));
+            var job = await host.CreateJobAsync();
+            await host.StartWorkerAsync();
+            await processor.WaitForStartAsync();
+
+            int claimedVersion;
+            await using (var dbContext = host.CreateDbContext())
+            {
+                var claimed = await dbContext.PlanningJobs.SingleAsync(existing => existing.Id == job.Id);
+                Assert.Equal(PlanningJobStatus.Running, claimed.Status);
+                Assert.Equal(1, claimed.AttemptCount);
+                claimedVersion = claimed.ConcurrencyVersion;
+            }
+
+            // Let the worker renew its lease, so release must use the renewed version, not the claim version
+            await Task.Delay(TimeSpan.FromMilliseconds(1500));
+            await using (var dbContext = host.CreateDbContext())
+            {
+                var renewed = await dbContext.PlanningJobs.SingleAsync(existing => existing.Id == job.Id);
+                Assert.Equal(PlanningJobStatus.Running, renewed.Status);
+                Assert.Equal(1, renewed.AttemptCount); // no lease loss and reclaim happened
+                Assert.True(renewed.ConcurrencyVersion > claimedVersion, "Expected at least one lease renewal.");
+                claimedVersion = renewed.ConcurrencyVersion;
+            }
+            Assert.Equal(1, processor.CallCount);
+
+            await host.StopHostAsync();
+
+            await using (var dbContext = host.CreateDbContext())
+            {
+                var released = await dbContext.PlanningJobs.SingleAsync(existing => existing.Id == job.Id);
+                Assert.Equal(PlanningJobStatus.Queued, released.Status);
+                Assert.Equal("Queued", released.CurrentStep);
+                Assert.Equal(0, released.AttemptCount);
+                Assert.Null(released.WorkerLeaseToken);
+                Assert.Null(released.LeaseExpiresAtUnixMilliseconds);
+                Assert.Equal(claimedVersion + 1, released.ConcurrencyVersion);
+                Assert.Null(released.ResultPayload);
+                Assert.Null(released.FailureCode);
+                Assert.Null(released.CompletedAtUtc);
+            }
+
+            Assert.Equal(1, processor.CallCount);
+        }
+        finally
+        {
+            DeleteDatabaseFiles(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task Worker_GracefulShutdownThenRestart_SucceedsWithOneCountedAttempt()
+    {
+        var databasePath = NewTempDatabasePath();
+        try
+        {
+            var interruptedProcessor = new BlockingProcessor();
+            PlanningJobReadModel job;
+            await using (var firstHost = await WorkerFixture.CreateAsync(
+                             interruptedProcessor,
+                             startWorker: false,
+                             databasePath: databasePath))
+            {
+                job = await firstHost.CreateJobAsync();
+                await firstHost.StartWorkerAsync();
+                await interruptedProcessor.WaitForStartAsync();
+                await firstHost.StopHostAsync();
+            }
+
+            // No lease-expiry wait: the released job is immediately claimable
+            var recoveryProcessor = new SuccessfulProcessor();
+            await using (var restartedHost = await WorkerFixture.CreateAsync(
+                             recoveryProcessor,
+                             databasePath: databasePath))
+            {
+                var status = await restartedHost.WaitForStatusAsync(job.Id, PlanningJobStatus.Succeeded);
+
+                Assert.Equal(1, interruptedProcessor.CallCount);
+                Assert.Equal(1, recoveryProcessor.CallCount);
+                Assert.Equal(1, status.AttemptCount);
+                Assert.Equal("""{"plan":"test-plan"}""", status.ResultPayload);
+                await using var dbContext = restartedHost.CreateDbContext();
+                Assert.Single(await dbContext.PlanningJobs.ToListAsync());
+            }
+        }
+        finally
+        {
+            DeleteDatabaseFiles(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task Worker_RepeatedGracefulShutdowns_DoNotExhaustAttempts()
+    {
+        var databasePath = NewTempDatabasePath();
+        try
+        {
+            Guid jobId = Guid.Empty;
+            for (var stop = 0; stop < 2; stop++)
+            {
+                var interruptedProcessor = new BlockingProcessor();
+                await using var host = await WorkerFixture.CreateAsync(
+                    interruptedProcessor,
+                    startWorker: false,
+                    databasePath: databasePath);
+                if (stop == 0)
+                    jobId = (await host.CreateJobAsync()).Id;
+                await host.StartWorkerAsync();
+                await interruptedProcessor.WaitForStartAsync();
+                await host.StopHostAsync();
+
+                await using var dbContext = host.CreateDbContext();
+                var released = await dbContext.PlanningJobs.SingleAsync(existing => existing.Id == jobId);
+                Assert.Equal(PlanningJobStatus.Queued, released.Status);
+                Assert.Equal(0, released.AttemptCount);
+                Assert.Equal(1, interruptedProcessor.CallCount);
+            }
+
+            var recoveryProcessor = new SuccessfulProcessor();
+            await using (var restartedHost = await WorkerFixture.CreateAsync(
+                             recoveryProcessor,
+                             databasePath: databasePath))
+            {
+                var status = await restartedHost.WaitForStatusAsync(jobId, PlanningJobStatus.Succeeded);
+
+                Assert.Equal(1, recoveryProcessor.CallCount);
+                Assert.Equal(1, status.AttemptCount);
+                Assert.Null(status.FailureCode);
+            }
+        }
+        finally
+        {
+            DeleteDatabaseFiles(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task Worker_LeaseExpiryWithoutRelease_StillConsumesAttempt_AndExhaustsAtMaxAttempts()
+    {
+        // Hard-crash equivalent: the jobs are left Running with an expired lease and no release, as if the process
+        // had been killed. This simulates the persisted state of a kill; it does not terminate a real process.
+        var databasePath = NewTempDatabasePath();
+        try
+        {
+            var processor = new SuccessfulProcessor();
+            await using var fixture = await WorkerFixture.CreateAsync(
+                processor,
+                startWorker: false,
+                databasePath: databasePath);
+            var firstAttemptJob = await fixture.CreateJobAsync();
+            var lastAttemptJob = await fixture.CreateJobAsync();
+            await using (var dbContext = fixture.CreateDbContext())
+            {
+                foreach (var (jobId, attemptCount) in new[] { (firstAttemptJob.Id, 1), (lastAttemptJob.Id, 2) })
+                {
+                    await dbContext.PlanningJobs
+                        .Where(existing => existing.Id == jobId)
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(entity => entity.Status, PlanningJobStatus.Running)
+                            .SetProperty(entity => entity.AttemptCount, attemptCount)
+                            .SetProperty(entity => entity.CurrentStep, "Processing")
+                            .SetProperty(entity => entity.WorkerLeaseToken, Guid.NewGuid())
+                            .SetProperty(entity => entity.ConcurrencyVersion, entity => entity.ConcurrencyVersion + 1)
+                            .SetProperty(
+                                entity => entity.LeaseExpiresAtUnixMilliseconds,
+                                DateTimeOffset.UtcNow.AddSeconds(-1).ToUnixTimeMilliseconds()));
+                }
+            }
+
+            await fixture.StartWorkerAsync();
+            var reclaimed = await fixture.WaitForStatusAsync(firstAttemptJob.Id, PlanningJobStatus.Succeeded);
+            var exhausted = await fixture.WaitForStatusAsync(lastAttemptJob.Id, PlanningJobStatus.Failed);
+
+            Assert.Equal(2, reclaimed.AttemptCount);
+            Assert.Equal(2, exhausted.AttemptCount);
+            Assert.Equal("MAX_ATTEMPTS_EXCEEDED", exhausted.FailureCode);
+            Assert.NotNull(exhausted.CompletedAtUtc);
+            Assert.Equal(1, processor.CallCount);
+        }
+        finally
+        {
+            DeleteDatabaseFiles(databasePath);
+        }
+    }
+
+    [Fact]
+    public async Task ReleaseAsync_StaleLeaseOwner_CannotReleaseJobReclaimedByAnotherWorker()
+    {
+        await using var fixture = await WorkerFixture.CreateAsync(new SuccessfulProcessor(), startWorker: false);
+        var job = await fixture.CreateJobAsync();
+        var leaseStart = DateTimeOffset.UtcNow;
+
+        await using var workerADb = fixture.CreateDbContext();
+        var workerA = await new PlanningJobs(workerADb).ClaimNextAsync(
+            Guid.NewGuid(),
+            leaseStart,
+            TimeSpan.FromMilliseconds(1),
+            CancellationToken.None);
+        Assert.NotNull(workerA);
+
+        await using var workerBDb = fixture.CreateDbContext();
+        var workerB = await new PlanningJobs(workerBDb).ClaimNextAsync(
+            Guid.NewGuid(),
+            leaseStart.AddMilliseconds(2),
+            TimeSpan.FromSeconds(30),
+            CancellationToken.None);
+        Assert.NotNull(workerB);
+
+        var released = await new PlanningJobs(workerADb).ReleaseAsync(
+            job.Id,
+            workerA.LeaseToken,
+            workerA.ConcurrencyVersion,
+            CancellationToken.None);
+
+        Assert.False(released);
+        await using var verifyDb = fixture.CreateDbContext();
+        var current = await verifyDb.PlanningJobs.SingleAsync(existing => existing.Id == job.Id);
+        Assert.Equal(PlanningJobStatus.Running, current.Status);
+        Assert.Equal(workerB.LeaseToken, current.WorkerLeaseToken);
+        Assert.Equal(workerB.ConcurrencyVersion, current.ConcurrencyVersion);
+        Assert.Equal(2, current.AttemptCount);
+        Assert.NotNull(current.LeaseExpiresAtUnixMilliseconds);
+    }
+
+    [Fact]
+    public async Task ReleaseAsync_StaleVersionOfSameLease_IsRejected_AndCurrentVersionReleases()
+    {
+        await using var fixture = await WorkerFixture.CreateAsync(new SuccessfulProcessor(), startWorker: false);
+        var job = await fixture.CreateJobAsync();
+        await using var dbContext = fixture.CreateDbContext();
+        var planningJobs = new PlanningJobs(dbContext);
+        var claimed = await planningJobs.ClaimNextAsync(
+            Guid.NewGuid(),
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromSeconds(30),
+            CancellationToken.None);
+        Assert.NotNull(claimed);
+        var renewedVersion = await planningJobs.RenewLeaseAsync(
+            job.Id,
+            claimed.LeaseToken,
+            claimed.ConcurrencyVersion,
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromSeconds(30),
+            CancellationToken.None);
+        Assert.NotNull(renewedVersion);
+
+        await Assert.ThrowsAsync<DbUpdateConcurrencyException>(() => planningJobs.ReleaseAsync(
+            job.Id,
+            claimed.LeaseToken,
+            claimed.ConcurrencyVersion,
+            CancellationToken.None));
+        await using (var verifyDb = fixture.CreateDbContext())
+        {
+            var unchanged = await verifyDb.PlanningJobs.SingleAsync(existing => existing.Id == job.Id);
+            Assert.Equal(PlanningJobStatus.Running, unchanged.Status);
+            Assert.Equal(1, unchanged.AttemptCount);
+            Assert.Equal(renewedVersion, unchanged.ConcurrencyVersion);
+        }
+
+        Assert.True(await planningJobs.ReleaseAsync(
+            job.Id,
+            claimed.LeaseToken,
+            renewedVersion.Value,
+            CancellationToken.None));
+        await using (var verifyDb = fixture.CreateDbContext())
+        {
+            var released = await verifyDb.PlanningJobs.SingleAsync(existing => existing.Id == job.Id);
+            Assert.Equal(PlanningJobStatus.Queued, released.Status);
+            Assert.Equal(0, released.AttemptCount);
+            Assert.Null(released.WorkerLeaseToken);
+        }
+    }
+
+    private static string NewTempDatabasePath() =>
+        Path.Combine(Path.GetTempPath(), $"planning-job-release-{Guid.NewGuid():N}.db");
+
+    private static void DeleteDatabaseFiles(string databasePath)
+    {
+        foreach (var path in new[] { databasePath, $"{databasePath}-wal", $"{databasePath}-shm" })
+        {
+            if (File.Exists(path))
+                File.Delete(path);
         }
     }
 

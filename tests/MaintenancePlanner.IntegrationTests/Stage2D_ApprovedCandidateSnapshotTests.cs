@@ -16,6 +16,12 @@ namespace MaintenancePlanner.IntegrationTests;
 
 public sealed class Stage2D_ApprovedCandidateSnapshotTests
 {
+    // Approval revalidates the selected candidate, so approvable payloads carry schedulable P-101 placements.
+    private static readonly string StableIdPlacementsJson = JsonSerializer.Serialize(
+        ApprovalTestSupport.StableIdPlacements(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    private static readonly string LowestCostPlacementsJson = JsonSerializer.Serialize(
+        ApprovalTestSupport.LowestCostPlacements(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
     [Fact]
     public async Task Stage2D1_ApprovalPersistsApprovedCandidate_SnapshotCaptured()
     {
@@ -29,7 +35,7 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
               "result": {
                 "candidates": [
                   {
-                    "taskPlacements": [],
+                    "taskPlacements": {{StableIdPlacementsJson}},
                     "rationale": "Test candidate",
                     "evidenceReferences": [],
                     "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
@@ -89,7 +95,7 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
         await using var fixture = await ApprovalTestFixture.CreateAsync();
         var jobId = Guid.NewGuid();
 
-        var candidatePayload = """
+        var candidatePayload = $$"""
             {
               "outcome": "CandidatesGenerated",
               "result": {
@@ -97,7 +103,7 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
                   {
                     "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
                     "costEstimate": 500.00,
-                    "taskPlacements": []
+                    "taskPlacements": {{StableIdPlacementsJson}}
                   }
                 ]
               }
@@ -133,11 +139,11 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
     public async Task Stage2D1_SourceCandidateReordering_DoesNotAffectApprovedSnapshot()
     {
         // Verify: Reordering or modifying the source candidate list after approval
-        // does not change the persisted snapshot
+        // does not change the persisted snapshot of the explicitly selected candidate
         await using var fixture = await ApprovalTestFixture.CreateAsync();
         var jobId = Guid.NewGuid();
 
-        var originalPayload = """
+        var originalPayload = $$"""
             {
               "outcome": "CandidatesGenerated",
               "result": {
@@ -146,13 +152,13 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
                     "id": "candidate-1",
                     "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
                     "costEstimate": 500.00,
-                    "taskPlacements": []
+                    "taskPlacements": {{StableIdPlacementsJson}}
                   },
                   {
                     "id": "candidate-2",
                     "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
                     "costEstimate": 600.00,
-                    "taskPlacements": []
+                    "taskPlacements": {{LowestCostPlacementsJson}}
                   }
                 ]
               }
@@ -167,8 +173,9 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
             await CreatePlanningJobWithPayloadAsync(dbContext, jobId, originalPayload);
         }
 
+        // The job has two candidates, so the candidate to approve is selected explicitly
         var approvalService = fixture.ServiceProvider.GetRequiredService<IDraftApprovalService>();
-        var result = await approvalService.ApproveDraftAsync(jobId, CancellationToken.None);
+        var result = await approvalService.ApproveDraftAsync(jobId, candidateIndex: 0, CancellationToken.None);
 
         if (!result.Succeeded)
         {
@@ -182,15 +189,15 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
             var draft = await dbContext.Drafts.FirstAsync(d => d.Id == draftId);
             capturedSnapshot = draft.ApprovedCandidatePayload!;
 
-            // Verify it captured candidates[0]
+            // Verify it captured the selected candidate (index 0, "candidate-1")
             var doc = JsonDocument.Parse(capturedSnapshot);
             var root = doc.RootElement;
             var costEst = root.GetProperty("costEstimate").GetDecimal();
-            Assert.Equal(500.00m, costEst); // Original first candidate
+            Assert.Equal(500.00m, costEst); // Selected candidate
         }
 
         // Now simulate the source being reordered
-        var reorderedPayload = """
+        var reorderedPayload = $$"""
             {
               "outcome": "CandidatesGenerated",
               "result": {
@@ -199,13 +206,13 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
                     "id": "candidate-2",
                     "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
                     "costEstimate": 600.00,
-                    "taskPlacements": []
+                    "taskPlacements": {{LowestCostPlacementsJson}}
                   },
                   {
                     "id": "candidate-1",
                     "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
                     "costEstimate": 500.00,
-                    "taskPlacements": []
+                    "taskPlacements": {{StableIdPlacementsJson}}
                   }
                 ]
               }
@@ -232,14 +239,21 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
         await using var fixture = await ApprovalTestFixture.CreateAsync();
         var jobId = Guid.NewGuid();
 
-        var payloadWithInvalidPart = """
+        // An otherwise valid P-101 plan in the baseline window, plus one placement for a task that does not exist
+        // in the authoritative catalogue. The unknown task is the only reason approval can fail.
+        var placementsWithNonexistentTask = JsonSerializer.Serialize(
+            ApprovalTestSupport.StableIdPlacements()
+                .Append(ApprovalTestSupport.Placement("NONEXISTENT-TASK-999", 14, 15, "TECH-001"))
+                .ToArray(),
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var payloadWithNonexistentTask = $$"""
             {
               "outcome": "CandidatesGenerated",
               "result": {
                 "candidates": [
                   {
                     "requestedTaskIds": ["NONEXISTENT-TASK-999"],
-                    "taskPlacements": []
+                    "taskPlacements": {{placementsWithNonexistentTask}}
                   }
                 ]
               }
@@ -248,20 +262,28 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
 
         await using (var dbContext = fixture.CreateDbContext())
         {
-            await CreatePlanningJobWithPayloadAsync(dbContext, jobId, payloadWithInvalidPart);
+            await CreatePlanningJobWithPayloadAsync(dbContext, jobId, payloadWithNonexistentTask);
         }
 
         var approvalService = fixture.ServiceProvider.GetRequiredService<IDraftApprovalService>();
         var result = await approvalService.ApproveDraftAsync(jobId, CancellationToken.None);
 
-        // Should fail due to missing spare parts
+        // Should fail because the plan contains a nonexistent task, not because of window or empty-plan checks
         Assert.False(result.Succeeded);
+        Assert.NotNull(result.ConflictData);
+        Assert.Equal("CANDIDATE_NO_LONGER_VALID", result.ConflictData.Reason);
+        Assert.Equal("TASK_NOT_FOUND", result.ConflictData.ResourceId);
+        Assert.Contains("NONEXISTENT-TASK-999", result.FailureReason);
 
-        // Verify no draft was created
+        // Verify no draft (and therefore no approved snapshot), reservation or lock was persisted
         await using (var dbContext = fixture.CreateDbContext())
         {
             var draft = await dbContext.Drafts.FirstOrDefaultAsync(d => d.PlanningJobId == jobId);
             Assert.Null(draft);
+            Assert.False(await dbContext.Drafts.AnyAsync(d => d.ApprovedCandidatePayload != null));
+            Assert.Empty(await dbContext.Reservations.ToListAsync());
+            Assert.Empty(await dbContext.LockedTaskAssignments.ToListAsync());
+            Assert.Equal(0m, (await dbContext.SpareParts.SingleAsync(p => p.Id == "BR-101")).ReservedQuantity);
         }
     }
 
@@ -272,7 +294,7 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
         await using var fixture = await ApprovalTestFixture.CreateAsync();
         var jobId = Guid.NewGuid();
 
-        var candidatePayload = """
+        var candidatePayload = $$"""
             {
               "outcome": "CandidatesGenerated",
               "result": {
@@ -280,7 +302,7 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
                   {
                     "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
                     "timestamp": "2026-10-25T10:00:00Z",
-                    "taskPlacements": []
+                    "taskPlacements": {{StableIdPlacementsJson}}
                   }
                 ]
               }
@@ -326,14 +348,14 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
         await using var fixture = await ApprovalTestFixture.CreateAsync();
         var jobId = Guid.NewGuid();
 
-        var candidatePayload = """
+        var candidatePayload = $$"""
             {
               "outcome": "CandidatesGenerated",
               "result": {
                 "candidates": [
                   {
                     "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
-                    "taskPlacements": []
+                    "taskPlacements": {{StableIdPlacementsJson}}
                   }
                 ]
               }
@@ -381,7 +403,7 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
         {
             Id = jobId,
             OperationId = Guid.NewGuid(),
-            RequestPayload = """{"requestText":"Test job","assetIds":["P-101"]}""",
+            RequestPayload = ApprovalTestSupport.RequestPayload("Test job"),
             Status = Domain.Entities.PlanningJobStatus.Succeeded,
             CreatedAtUtc = DateTimeOffset.UtcNow,
             CompletedAtUtc = DateTimeOffset.UtcNow,
@@ -437,7 +459,7 @@ public sealed class Stage2D_ApprovedCandidateSnapshotTests
             builder.Services.AddDbContext<MaintenancePlannerDbContext>(db =>
                 db.UseSqlite(connectionString));
             builder.Services.AddScoped<IMaintenancePlannerQueries, MaintenancePlannerQueries>();
-            builder.Services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            builder.Services.AddApprovalServices();
 
             var app = builder.Build();
 

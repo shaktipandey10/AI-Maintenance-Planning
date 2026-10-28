@@ -1,9 +1,32 @@
+using System.Collections.ObjectModel;
+
 namespace MaintenancePlanner.Application.Planning;
 
 public sealed record PlanningRequest(
     string RequestText,
     IReadOnlyList<string> AssetIds,
-    string? MaintenanceWindowId);
+    string? MaintenanceWindowId)
+{
+    /// <summary>
+    /// Tasks already completed on the approved plan this request replaces (FR08). They are not scheduled again,
+    /// and a task whose predecessor is among them treats that predecessor as satisfied. Empty for a first plan.
+    /// </summary>
+    public IReadOnlyList<string> CompletedTaskIds { get; init; } = [];
+
+    /// <summary>
+    /// Part quantities held by the unconsumed reservations of the approved plan this request replaces (FR07). The
+    /// replacement's approval releases them, so planning the replacement may count them as available; no other plan
+    /// may. Empty for a first plan.
+    /// </summary>
+    public IReadOnlyDictionary<string, decimal> ReleasableReservedQuantities { get; init; } =
+        ReadOnlyDictionary<string, decimal>.Empty;
+
+    /// <summary>
+    /// Approved placements of the tasks in progress on the plan this request replaces (FR08). They are carried into
+    /// the replacement unchanged (same times and crew) instead of being scheduled again. Empty for a first plan.
+    /// </summary>
+    public IReadOnlyList<PlanningTaskPlacement> InProgressPlacements { get; init; } = [];
+}
 
 public sealed record PlanningInterpretation(
     string MaintenanceIntent,
@@ -123,7 +146,18 @@ public sealed record PlanningCandidatesGeneratedResult(
 public sealed record PlanningCandidateValidationRequest(
     IReadOnlyList<string> AssetIds,
     string MaintenanceWindowId,
-    PlanningCandidate Candidate);
+    PlanningCandidate Candidate)
+{
+    /// <summary>
+    /// Tasks already completed on the approved plan being replaced: placing one is rejected, and they satisfy the
+    /// predecessor requirement of the tasks that follow them.
+    /// </summary>
+    public IReadOnlyList<string> CompletedTaskIds { get; init; } = [];
+
+    /// <summary>Part quantities the approved plan being replaced holds and its replacement's approval releases.</summary>
+    public IReadOnlyDictionary<string, decimal> ReleasableReservedQuantities { get; init; } =
+        ReadOnlyDictionary<string, decimal>.Empty;
+}
 
 public sealed record PlanningValidationViolation(
     string Code,
@@ -138,7 +172,24 @@ public sealed record PlanningCandidateValidationResult(
 public sealed record PlanningScheduleRequest(
     IReadOnlyList<string> AssetIds,
     string? MaintenanceWindowId,
-    IReadOnlyList<string> RequiredTaskIds);
+    IReadOnlyList<string> RequiredTaskIds)
+{
+    /// <summary>
+    /// Tasks already completed on the approved plan being replaced: excluded from the schedule, and treated as
+    /// satisfied predecessors of the remaining work.
+    /// </summary>
+    public IReadOnlyList<string> CompletedTaskIds { get; init; } = [];
+
+    /// <summary>Part quantities the approved plan being replaced holds and its replacement's approval releases.</summary>
+    public IReadOnlyDictionary<string, decimal> ReleasableReservedQuantities { get; init; } =
+        ReadOnlyDictionary<string, decimal>.Empty;
+
+    /// <summary>
+    /// Approved placements of tasks in progress on the plan being replaced: kept exactly as they are, with the rest
+    /// of the schedule fitted around them. Each must be within the required task scope.
+    /// </summary>
+    public IReadOnlyList<PlanningTaskPlacement> InProgressPlacements { get; init; } = [];
+}
 
 public enum PlanningScheduleOutcome
 {

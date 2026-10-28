@@ -320,30 +320,149 @@ describe('AlternativesScreen', () => {
       });
     });
 
+    it('should proceed to approval with Alternative 1 and index 0 when nothing else is selected', async () => {
+      mockApiClient.apiClient.getCandidates.mockResolvedValue(mockCandidatesResponse);
+      const onProceedToApproval = vi.fn();
+
+      render(
+        <AlternativesScreen
+          jobId={mockJobId}
+          onBack={mockOnBack}
+          onProceedToApproval={onProceedToApproval}
+        />
+      );
+
+      fireEvent.click(await screen.findByRole('button', { name: /Proceed to Approval/i }));
+
+      expect(onProceedToApproval).toHaveBeenCalledTimes(1);
+      const [candidate, interpretation, candidateIndex] = onProceedToApproval.mock.calls[0];
+      expect(candidateIndex).toBe(0);
+      expect(candidate.rationale).toBe('Standard bearing replacement');
+      expect(candidate.totalLabourCostAmount).toBe(450.5);
+      expect(interpretation).toEqual(mockCandidatesResponse.interpretation);
+    });
+
+    it('should proceed to approval with Alternative 2 and index 1 after selecting it', async () => {
+      mockApiClient.apiClient.getCandidates.mockResolvedValue(mockCandidatesResponse);
+      const onProceedToApproval = vi.fn();
+
+      render(
+        <AlternativesScreen
+          jobId={mockJobId}
+          onBack={mockOnBack}
+          onProceedToApproval={onProceedToApproval}
+        />
+      );
+
+      const secondCard = (await screen.findByText('Alternative 2')).closest('[role="button"]') as HTMLElement;
+      fireEvent.click(secondCard);
+      await waitFor(() => {
+        expect(secondCard.getAttribute('aria-pressed')).toBe('true');
+        expect(screen.queryByText(/Alternative 2 - Details/i)).toBeTruthy();
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: /Proceed to Approval/i }));
+
+      expect(onProceedToApproval).toHaveBeenCalledTimes(1);
+      const [candidate, , candidateIndex] = onProceedToApproval.mock.calls[0];
+      expect(candidateIndex).toBe(1);
+      expect(candidate).toEqual(mockCandidatesResponse.candidates[1]);
+      expect(candidate.rationale).toBe('Extended bearing replacement with verification');
+    });
+
     it('should switch details on candidate click', async () => {
       mockApiClient.apiClient.getCandidates.mockResolvedValue(
         mockCandidatesResponse
       );
 
-      const { container } = render(
+      render(
         <AlternativesScreen jobId={mockJobId} onBack={mockOnBack} />
       );
 
-      await waitFor(() => {
-        const buttons = container.querySelectorAll('button');
-        // Click the second candidate card
-        const secondCandidateBtn = Array.from(buttons).find(
-          (btn) => btn.textContent?.includes('Alternative 2')
-        ) as HTMLButtonElement;
-        expect(secondCandidateBtn).toBeTruthy();
-        if (secondCandidateBtn) {
-          fireEvent.click(secondCandidateBtn);
-        }
-      });
+      // Candidate cards are clickable <div>s labelled "Alternative N"; the first is selected initially
+      const secondCandidateLabel = await screen.findByText('Alternative 2');
+      expect(screen.queryByText(/Alternative 1 - Details/i)).toBeTruthy();
+
+      // Click the second candidate card
+      fireEvent.click(secondCandidateLabel);
 
       await waitFor(() => {
         expect(screen.queryByText(/Alternative 2 - Details/i)).toBeTruthy();
       });
+      expect(screen.queryByText(/Alternative 1 - Details/i)).toBeNull();
+    });
+
+    const findCard = async (label: string) =>
+      (await screen.findByText(label)).closest('[role="button"]') as HTMLElement;
+
+    it('should expose candidate cards as focusable buttons with pressed state', async () => {
+      mockApiClient.apiClient.getCandidates.mockResolvedValue(
+        mockCandidatesResponse
+      );
+
+      render(<AlternativesScreen jobId={mockJobId} onBack={mockOnBack} />);
+
+      const firstCard = await findCard('Alternative 1');
+      const secondCard = await findCard('Alternative 2');
+      expect(firstCard).toBeTruthy();
+      expect(secondCard).toBeTruthy();
+      expect(firstCard.tabIndex).toBe(0);
+      expect(secondCard.tabIndex).toBe(0);
+      expect(firstCard.getAttribute('aria-pressed')).toBe('true');
+      expect(secondCard.getAttribute('aria-pressed')).toBe('false');
+    });
+
+    it('should select a candidate with the Enter key', async () => {
+      mockApiClient.apiClient.getCandidates.mockResolvedValue(
+        mockCandidatesResponse
+      );
+
+      render(<AlternativesScreen jobId={mockJobId} onBack={mockOnBack} />);
+
+      const secondCard = await findCard('Alternative 2');
+      secondCard.focus();
+      expect(document.activeElement).toBe(secondCard);
+      fireEvent.keyDown(secondCard, { key: 'Enter' });
+
+      await waitFor(() => {
+        expect(screen.queryByText(/Alternative 2 - Details/i)).toBeTruthy();
+      });
+      expect(screen.queryByText(/Alternative 1 - Details/i)).toBeNull();
+      expect(secondCard.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('should select a candidate with the Space key', async () => {
+      mockApiClient.apiClient.getCandidates.mockResolvedValue(
+        mockCandidatesResponse
+      );
+
+      render(<AlternativesScreen jobId={mockJobId} onBack={mockOnBack} />);
+
+      const secondCard = await findCard('Alternative 2');
+      fireEvent.keyDown(secondCard, { key: ' ' });
+
+      await waitFor(() => {
+        expect(screen.queryByText(/Alternative 2 - Details/i)).toBeTruthy();
+      });
+      expect(secondCard.getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('should not select a candidate for other keys or keys pressed on its nested View Draft button', async () => {
+      mockApiClient.apiClient.getCandidates.mockResolvedValue(
+        mockCandidatesResponse
+      );
+
+      render(<AlternativesScreen jobId={mockJobId} onBack={mockOnBack} />);
+
+      const secondCard = await findCard('Alternative 2');
+      fireEvent.keyDown(secondCard, { key: 'a' });
+      const viewDraftButton = secondCard.querySelector('button') as HTMLButtonElement;
+      expect(viewDraftButton).toBeTruthy();
+      fireEvent.keyDown(viewDraftButton, { key: 'Enter' });
+
+      expect(screen.queryByText(/Alternative 1 - Details/i)).toBeTruthy();
+      expect(screen.queryByText(/Alternative 2 - Details/i)).toBeNull();
+      expect(secondCard.getAttribute('aria-pressed')).toBe('false');
     });
   });
 

@@ -33,8 +33,11 @@ public sealed class M7EndToEndSmokeTests
         await using var fixture = await SmokeTestFixture.CreateAsync();
         var planningJobId = Guid.NewGuid();
 
-        // Step 1: Create a planning job with predetermined result (no Ollama)
-        var resultPayload = """
+        // Step 1: Create a planning job with predetermined result (no Ollama).
+        // Approval revalidates the candidate, so it carries schedulable P-101 placements in the baseline window.
+        var placementsJson = JsonSerializer.Serialize(
+            ApprovalTestSupport.StableIdPlacements(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var resultPayload = $$"""
         {
           "outcome": "CandidatesGenerated",
           "result": {
@@ -43,7 +46,7 @@ public sealed class M7EndToEndSmokeTests
                 "rationale": "Standard bearing replacement procedure",
                 "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
                 "dependencyTaskIds": [],
-                "taskPlacements": [],
+                "taskPlacements": {{placementsJson}},
                 "evidenceReferences": ["manual-section-4.2"],
                 "totalLabourCostAmount": 500.00,
                 "totalLabourCostCurrency": "USD",
@@ -72,7 +75,7 @@ public sealed class M7EndToEndSmokeTests
                 Id = planningJobId,
                 OperationId = Guid.NewGuid(),
                 RequestPayload = JsonSerializer.Serialize(
-                    new PlanningJobRequestPayload("Replace bearing on P-101", ["P-101"], null)),
+                    new PlanningJobRequestPayload("Replace bearing on P-101", ["P-101"], ApprovalTestSupport.BaselineWindowId)),
                 Status = PlanningJobStatus.Succeeded,
                 CreatedAtUtc = DateTimeOffset.UtcNow,
                 CompletedAtUtc = DateTimeOffset.UtcNow,
@@ -289,7 +292,7 @@ public sealed class M7EndToEndSmokeTests
                 db.UseSqlite(connectionString));
             builder.Services.AddScoped<IPlanningJobs, PlanningJobs>();
             builder.Services.AddScoped<IMaintenancePlannerQueries, MaintenancePlannerQueries>();
-            builder.Services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            builder.Services.AddApprovalServices();
             builder.Services.AddScoped<IPlanProgressService, PlanProgressService>();
             builder.Services.AddScoped<IPlanExportService, PlanExportService>();
 

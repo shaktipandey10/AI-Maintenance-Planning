@@ -44,7 +44,7 @@ export const ApprovalScreen: React.FC<ApprovalScreenProps> = ({
     setExportError(null);
 
     try {
-      const result = await apiClient.approveDraft(jobId);
+      const result = await apiClient.approveDraft(jobId, candidateIndex);
       console.log('[Approval] Approval succeeded, draftId:', result.draftId);
       setDraftId(result.draftId);
       setApprovalState('success');

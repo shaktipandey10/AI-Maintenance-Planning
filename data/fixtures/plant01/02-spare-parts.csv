@@ -1,0 +1,6 @@
+id,name,unit,onHandQuantity,compatibleAssetIds
+SEAL-102,P-102 mechanical seal,each,2,P-102
+FILTER-103,P-103 intake filter element,each,3,P-103
+COUPLING-104,P-104 flexible coupling,each,1,P-104
+GASKET-105,P-105 flange gasket,each,4,P-105
+LUBE-OIL-46,ISO VG 46 lubricating oil,l,20,P-101;P-102;P-104;P-105

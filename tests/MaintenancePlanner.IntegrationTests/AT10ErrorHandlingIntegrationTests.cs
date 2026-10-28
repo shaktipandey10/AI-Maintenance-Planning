@@ -352,7 +352,7 @@ public sealed class AT10ErrorHandlingIntegrationTests
             var services = new ServiceCollection();
             services.AddDbContext<MaintenancePlannerDbContext>(db =>
                 db.UseSqlite(connectionString));
-            services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            services.AddApprovalServices();
 
             var serviceProvider = services.BuildServiceProvider();
 

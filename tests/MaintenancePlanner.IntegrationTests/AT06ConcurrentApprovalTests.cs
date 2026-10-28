@@ -33,11 +33,10 @@ public sealed class AT06ConcurrentApprovalTests
         var job1Id = Guid.NewGuid();
         var job2Id = Guid.NewGuid();
 
-        // Create two planning jobs with results that require BR-101
+        // Create two planning jobs that require BR-101, staffed by different crews so they compete only for the part
         await using (var dbContext = fixture.CreateDbContext())
         {
-            await CreatePlanningJobWithBR101RequirementAsync(dbContext, job1Id);
-            await CreatePlanningJobWithBR101RequirementAsync(dbContext, job2Id);
+            await ApprovalTestSupport.AddJobsCompetingOnlyForPartsAsync(dbContext, [job1Id, job2Id]);
         }
 
         // Submit both approvals concurrently with separate scopes for each request
@@ -64,6 +63,9 @@ public sealed class AT06ConcurrentApprovalTests
         Assert.NotNull(failedResult);
         Assert.True(successfulResult.Succeeded);
         Assert.False(failedResult.Succeeded);
+        // The loser must be rejected for the final BR-101, not for any other conflict
+        Assert.Equal("INSUFFICIENT_INVENTORY", failedResult.ConflictData!.Reason);
+        Assert.Equal("BR-101", failedResult.ConflictData.ResourceId);
 
         // Verify database state
         await using (var dbContext = fixture.CreateDbContext())
@@ -98,8 +100,7 @@ public sealed class AT06ConcurrentApprovalTests
 
             await using (var dbContext = fixture.CreateDbContext())
             {
-                await CreatePlanningJobWithBR101RequirementAsync(dbContext, job1Id);
-                await CreatePlanningJobWithBR101RequirementAsync(dbContext, job2Id);
+                await ApprovalTestSupport.AddJobsCompetingOnlyForPartsAsync(dbContext, [job1Id, job2Id]);
             }
 
             var approvalService = fixture.ServiceProvider.GetRequiredService<IDraftApprovalService>();
@@ -109,6 +110,7 @@ public sealed class AT06ConcurrentApprovalTests
 
             var successCount = (result1.Succeeded ? 1 : 0) + (result2.Succeeded ? 1 : 0);
             Assert.Equal(1, successCount);
+            Assert.Equal("INSUFFICIENT_INVENTORY", (result1.Succeeded ? result2 : result1).ConflictData!.Reason);
 
             await using (var dbContext = fixture.CreateDbContext())
             {
@@ -213,16 +215,12 @@ public sealed class AT06ConcurrentApprovalTests
         const int concurrentRequestCount = 12;
         var jobIds = new List<Guid>();
 
-        // Create 12 planning jobs, each requiring BR-101
+        // Create 12 planning jobs, each requiring BR-101 and staffed by its own crew, so they compete only for the part
         await using (var dbContext = fixture.CreateDbContext())
         {
             for (int i = 0; i < concurrentRequestCount; i++)
-            {
-                var jobId = Guid.NewGuid();
-                jobIds.Add(jobId);
-                await CreatePlanningJobWithBR101RequirementAsync(dbContext, jobId);
-            }
-            await dbContext.SaveChangesAsync();
+                jobIds.Add(Guid.NewGuid());
+            await ApprovalTestSupport.AddJobsCompetingOnlyForPartsAsync(dbContext, jobIds);
         }
 
         // Verify jobs were created
@@ -246,6 +244,13 @@ public sealed class AT06ConcurrentApprovalTests
         // Assertion 2: All other requests return 409 Conflict
         var conflictResponses = responses.Where(r => r.StatusCode == HttpStatusCode.Conflict).ToList();
         Assert.Equal(concurrentRequestCount - 1, conflictResponses.Count);
+        foreach (var conflict in conflictResponses)
+        {
+            // Every loser must be rejected for the final BR-101, not for any other conflict
+            var error = await conflict.Content.ReadFromJsonAsync<ApprovalErrorResponse>();
+            Assert.Equal("INSUFFICIENT_INVENTORY", error!.Reason);
+            Assert.Equal("BR-101", error.ResourceId);
+        }
 
         // Assertion 3: No other status codes present
         var otherResponses = responses.Where(r =>
@@ -283,50 +288,11 @@ public sealed class AT06ConcurrentApprovalTests
         }
     }
 
-    private static async Task CreatePlanningJobWithBR101RequirementAsync(
+    // Approval revalidates the candidate, so the job carries a schedulable P-101 candidate requiring one BR-101.
+    private static Task CreatePlanningJobWithBR101RequirementAsync(
         MaintenancePlannerDbContext dbContext,
-        Guid jobId)
-    {
-        var planningJob = new PlanningJob
-        {
-            Id = jobId,
-            OperationId = Guid.NewGuid(),
-            RequestPayload = """{"requestText":"Plan bearing replacement for P-101.","assetIds":["P-101"]}""",
-            Status = Domain.Entities.PlanningJobStatus.Succeeded,
-            CreatedAtUtc = DateTimeOffset.UtcNow,
-            CompletedAtUtc = DateTimeOffset.UtcNow,
-            ResultPayload = $$"""
-                {
-                  "outcome": "CandidatesGenerated",
-                  "result": {
-                    "candidates": [
-                      {
-                        "taskPlacements": [],
-                        "rationale": "Test candidate requiring BR-101",
-                        "evidenceReferences": [],
-                        "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
-                        "dependencyTaskIds": []
-                      }
-                    ],
-                    "assumptions": [],
-                    "evidenceReferences": [],
-                    "interpretation": {
-                      "maintenanceIntent": "Replace bearing",
-                      "scope": "P-101",
-                      "proposedAssetIds": ["P-101"],
-                      "proposedTaskIds": ["P101-BEARING-REPLACEMENT"],
-                      "missingInformation": [],
-                      "assumptions": [],
-                      "scopeResolution": "Resolved",
-                      "scopeMappings": []
-                    }
-                  }
-                }
-                """
-        };
-        await dbContext.PlanningJobs.AddAsync(planningJob);
-        await dbContext.SaveChangesAsync();
-    }
+        Guid jobId) =>
+        ApprovalTestSupport.AddSucceededJobAsync(dbContext, jobId);
 
     private sealed class ApprovalTestFixture : IAsyncDisposable
     {
@@ -370,8 +336,7 @@ public sealed class AT06ConcurrentApprovalTests
             var builder = WebApplication.CreateBuilder();
             builder.Services.AddDbContext<MaintenancePlannerDbContext>(db =>
                 db.UseSqlite(connectionString));
-            builder.Services.AddScoped<IMaintenancePlannerQueries, MaintenancePlannerQueries>();
-            builder.Services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            builder.Services.AddApprovalServices();
 
             var app = builder.Build();
 
@@ -434,8 +399,7 @@ public sealed class AT06ConcurrentApprovalTests
 
             builder.Services.AddDbContext<MaintenancePlannerDbContext>(db =>
                 db.UseSqlite(connectionString));
-            builder.Services.AddScoped<IMaintenancePlannerQueries, MaintenancePlannerQueries>();
-            builder.Services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            builder.Services.AddApprovalServices();
             builder.Services.AddScoped<IPlanningJobs, PlanningJobs>();
 
             var app = builder.Build();

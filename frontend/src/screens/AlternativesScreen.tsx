@@ -172,12 +172,25 @@ export const AlternativesScreen: React.FC<AlternativesScreenProps> = ({
               const approvedIndex = localStorage.getItem(`approved_candidate_${jobId}`);
               const isApproved = approvedIndex !== null && Number(approvedIndex) === index;
               return (
+              // The card holds block content and the nested "View Draft" button, so it cannot be a
+              // <button>; it gets button semantics, focusability and Enter/Space activation instead.
               <div
                 key={index}
                 className={`candidate-card ${
                   index === selectedCandidateIndex ? 'selected' : ''
                 }`}
+                role="button"
+                tabIndex={0}
+                aria-pressed={index === selectedCandidateIndex}
                 onClick={() => setSelectedCandidateIndex(index)}
+                onKeyDown={(e) => {
+                  // Keys pressed on the nested "View Draft" button must not also select the card
+                  if (e.target !== e.currentTarget) return;
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setSelectedCandidateIndex(index);
+                  }
+                }}
               >
                 <div className="candidate-header">
                   <span className="candidate-number">Alternative {index + 1}</span>

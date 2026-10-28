@@ -281,50 +281,11 @@ public sealed class AT07IdempotentApprovalTests
         }
     }
 
-    private static async Task CreatePlanningJobWithBR101RequirementAsync(
+    // Approval revalidates the candidate, so the job carries a schedulable P-101 candidate requiring one BR-101.
+    private static Task CreatePlanningJobWithBR101RequirementAsync(
         MaintenancePlannerDbContext dbContext,
-        Guid jobId)
-    {
-        var planningJob = new PlanningJob
-        {
-            Id = jobId,
-            OperationId = Guid.NewGuid(),
-            RequestPayload = """{"requestText":"Plan bearing replacement for P-101.","assetIds":["P-101"]}""",
-            Status = Domain.Entities.PlanningJobStatus.Succeeded,
-            CreatedAtUtc = DateTimeOffset.UtcNow,
-            CompletedAtUtc = DateTimeOffset.UtcNow,
-            ResultPayload = $$"""
-                {
-                  "outcome": "CandidatesGenerated",
-                  "result": {
-                    "candidates": [
-                      {
-                        "taskPlacements": [],
-                        "rationale": "Test candidate requiring BR-101",
-                        "evidenceReferences": [],
-                        "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
-                        "dependencyTaskIds": []
-                      }
-                    ],
-                    "assumptions": [],
-                    "evidenceReferences": [],
-                    "interpretation": {
-                      "maintenanceIntent": "Replace bearing",
-                      "scope": "P-101",
-                      "proposedAssetIds": ["P-101"],
-                      "proposedTaskIds": ["P101-BEARING-REPLACEMENT"],
-                      "missingInformation": [],
-                      "assumptions": [],
-                      "scopeResolution": "Resolved",
-                      "scopeMappings": []
-                    }
-                  }
-                }
-                """
-        };
-        await dbContext.PlanningJobs.AddAsync(planningJob);
-        await dbContext.SaveChangesAsync();
-    }
+        Guid jobId) =>
+        ApprovalTestSupport.AddSucceededJobAsync(dbContext, jobId);
 
     private sealed class ApprovalTestFixture : IAsyncDisposable
     {
@@ -364,8 +325,7 @@ public sealed class AT07IdempotentApprovalTests
             var builder = WebApplication.CreateBuilder();
             builder.Services.AddDbContext<MaintenancePlannerDbContext>(db =>
                 db.UseSqlite(connectionString));
-            builder.Services.AddScoped<IMaintenancePlannerQueries, MaintenancePlannerQueries>();
-            builder.Services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            builder.Services.AddApprovalServices();
 
             var app = builder.Build();
 

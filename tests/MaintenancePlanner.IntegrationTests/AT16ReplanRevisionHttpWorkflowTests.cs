@@ -114,9 +114,11 @@ public sealed class AT16ReplanRevisionHttpWorkflowTests
         var v1JobId = await CreateJobWithResultAsync(api);
         await ApproveJobAsync(api, v1JobId);
 
-        // Create V2 (replan) and approve it
+        // Create V2 (replan). This harness registers no planning workflow, so the worker cannot produce a V2
+        // result and V2 approval is rejected; it was always rejected here, previously without being checked.
         var v2JobId = await ReplanJobViaHttpAsync(api, v1JobId, "Revised plan", ["P-101"]);
-        await ApproveJobAsync(api, v2JobId);
+        var v2Approval = await ApproveJobExpectingConflictAsync(api, v2JobId);
+        Assert.Equal("PLANNING_JOB_NO_RESULT", v2Approval.Reason);
 
         // Get revision history
         using var revisionResponse = await api.Client.GetAsync($"/api/planning-jobs/{v1JobId}/revisions");
@@ -313,11 +315,12 @@ public sealed class AT16ReplanRevisionHttpWorkflowTests
         {
             Id = jobId,
             OperationId = Guid.NewGuid(),
-            RequestPayload = """{"requestText":"Plan P-101 bearing replacement","assetIds":["P-101"]}""",
+            RequestPayload = ApprovalTestSupport.RequestPayload("Plan P-101 bearing replacement"),
             Status = PlanningJobStatus.Succeeded,
             CreatedAtUtc = DateTimeOffset.UtcNow,
             CompletedAtUtc = DateTimeOffset.UtcNow,
-            ResultPayload = """{"outcome":"CandidatesGenerated","result":{"candidates":[{"taskPlacements":[],"rationale":"Test candidate","evidenceReferences":[],"requestedTaskIds":["P101-BEARING-REPLACEMENT"],"dependencyTaskIds":[]}]}}"""
+            // Approval revalidates the candidate, so V1 carries a schedulable P-101 plan requiring one BR-101.
+            ResultPayload = ApprovalTestSupport.ResultPayload()
         };
         await dbContext.PlanningJobs.AddAsync(job);
         await dbContext.SaveChangesAsync();
@@ -383,7 +386,17 @@ public sealed class AT16ReplanRevisionHttpWorkflowTests
     private static async Task<HttpResponseMessage> ApproveJobAsync(ReplanTestApi api, Guid jobId)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/drafts/{jobId}/approve");
-        return await api.Client.SendAsync(request);
+        var response = await api.Client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode);
+        return response;
+    }
+
+    private static async Task<ApprovalErrorResponse> ApproveJobExpectingConflictAsync(ReplanTestApi api, Guid jobId)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"/api/drafts/{jobId}/approve");
+        using var response = await api.Client.SendAsync(request);
+        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        return (await response.Content.ReadFromJsonAsync<ApprovalErrorResponse>())!;
     }
 
     private sealed class ReplanTestApi : IAsyncDisposable
@@ -423,7 +436,7 @@ public sealed class AT16ReplanRevisionHttpWorkflowTests
             builder.Services.AddDbContext<MaintenancePlannerDbContext>(db => db.UseSqlite(connectionString));
             builder.Services.AddScoped<IPlanningJobs, PlanningJobs>();
             builder.Services.AddScoped<IMaintenancePlannerQueries, MaintenancePlannerQueries>();
-            builder.Services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            builder.Services.AddApprovalServices();
             builder.Services.AddScoped<IPlanningJobProcessor, PlanningJobProcessor>();
 
             // Register job worker with fast polling for tests

@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using MaintenancePlanner.Api.Contracts;
 using MaintenancePlanner.Application.Approvals;
 using MaintenancePlanner.Application.Queries;
@@ -20,17 +21,24 @@ namespace MaintenancePlanner.IntegrationTests;
 ///
 /// Bug: ExtractRequiredPartsAsync iterated ALL candidates and summed their requirements.
 /// With 2 candidates each requiring BR-101 x 1, the method calculated BR-101 x 2.
-/// Fix: Process only the first candidate (which the API always approves).
+/// Fix: Process only the candidate selected for approval (by explicit candidateIndex),
+/// reserving parts from that candidate's task placements.
 /// </summary>
 public sealed class CandidateAggregationRegressionTests
 {
+    // Approval revalidates the selected candidate, so candidates carry schedulable P-101 placements.
+    private static readonly string StableIdPlacementsJson = JsonSerializer.Serialize(
+        ApprovalTestSupport.StableIdPlacements(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    private static readonly string LowestCostPlacementsJson = JsonSerializer.Serialize(
+        ApprovalTestSupport.LowestCostPlacements(), new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
     [Fact]
-    public async Task TwoCandidatesEachRequiringBR101_OnlyFirstCandidateCountsForInventory()
+    public async Task TwoCandidatesEachRequiringBR101_OnlySelectedCandidateCountsForInventory()
     {
         // Arrange: Planning job with 2 candidates, each requiring BR-101 x 1
         // Only 1 BR-101 is in stock
-        // Act: Approve the job (which approves first candidate)
-        // Assert: Approval succeeds (reserves 1, not 2)
+        // Act: Approve the second candidate by explicit selection
+        // Assert: Approval succeeds (reserves 1 for the selected candidate, not 2 across candidates)
 
         await using var fixture = await ApprovalTestFixture.CreateAsync();
         var jobId = Guid.NewGuid();
@@ -42,7 +50,7 @@ public sealed class CandidateAggregationRegressionTests
             {
                 Id = jobId,
                 OperationId = Guid.NewGuid(),
-                RequestPayload = """{"requestText":"Plan bearing replacement for P-101.","assetIds":["P-101"]}""",
+                RequestPayload = ApprovalTestSupport.RequestPayload(),
                 Status = PlanningJobStatus.Succeeded,
                 CreatedAtUtc = DateTimeOffset.UtcNow,
                 CompletedAtUtc = DateTimeOffset.UtcNow,
@@ -52,7 +60,7 @@ public sealed class CandidateAggregationRegressionTests
                       "result": {
                         "candidates": [
                           {
-                            "taskPlacements": [],
+                            "taskPlacements": {{StableIdPlacementsJson}},
                             "rationale": "Candidate 1: Earliest schedule",
                             "evidenceReferences": [],
                             "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
@@ -60,7 +68,7 @@ public sealed class CandidateAggregationRegressionTests
                             "isLowestCostCandidate": false
                           },
                           {
-                            "taskPlacements": [],
+                            "taskPlacements": {{LowestCostPlacementsJson}},
                             "rationale": "Candidate 2: Lowest cost",
                             "evidenceReferences": [],
                             "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
@@ -88,12 +96,12 @@ public sealed class CandidateAggregationRegressionTests
             await dbContext.SaveChangesAsync();
         }
 
-        // Act: Approve the planning job
+        // Act: Approve the second candidate by explicit selection
         var approvalService = fixture.ServiceProvider.GetRequiredService<IDraftApprovalService>();
-        var result = await approvalService.ApproveDraftAsync(jobId, CancellationToken.None);
+        var result = await approvalService.ApproveDraftAsync(jobId, candidateIndex: 1, CancellationToken.None);
 
         // Assert: Approval succeeds (not fails due to double-counting)
-        Assert.True(result.Succeeded, "Approval should succeed with only first candidate's requirements");
+        Assert.True(result.Succeeded, "Approval should succeed with only the selected candidate's requirements");
         Assert.NotNull(result.DraftId);
 
         // Verify inventory was reserved for only 1 bearing, not 2
@@ -143,7 +151,7 @@ public sealed class CandidateAggregationRegressionTests
             {
                 Id = jobId,
                 OperationId = Guid.NewGuid(),
-                RequestPayload = """{"requestText":"Plan bearing replacement for P-101.","assetIds":["P-101"]}""",
+                RequestPayload = ApprovalTestSupport.RequestPayload(),
                 Status = PlanningJobStatus.Succeeded,
                 CreatedAtUtc = DateTimeOffset.UtcNow,
                 CompletedAtUtc = DateTimeOffset.UtcNow,
@@ -153,7 +161,7 @@ public sealed class CandidateAggregationRegressionTests
                       "result": {
                         "candidates": [
                           {
-                            "taskPlacements": [],
+                            "taskPlacements": {{StableIdPlacementsJson}},
                             "rationale": "Single candidate with multiple BR-101 requirements",
                             "evidenceReferences": [],
                             "requestedTaskIds": ["P101-BEARING-REPLACEMENT", "P101-VERIFICATION"],
@@ -205,11 +213,11 @@ public sealed class CandidateAggregationRegressionTests
     }
 
     [Fact]
-    public async Task InsufficientStockForFirstCandidate_StillReturns409ConflictAfterFix()
+    public async Task InsufficientStockForSelectedCandidate_StillReturns409ConflictAfterFix()
     {
         // Arrange: Planning job with 2 candidates, each requiring BR-101 x 1
         // Only 0 BR-101 in stock (none available)
-        // Act: Attempt approval
+        // Act: Attempt approval of the explicitly selected first candidate
         // Assert: Fails with 409 (because even 1 is needed and we have 0)
 
         await using var fixture = await ApprovalTestFixture.CreateAsync();
@@ -226,7 +234,7 @@ public sealed class CandidateAggregationRegressionTests
             {
                 Id = jobId,
                 OperationId = Guid.NewGuid(),
-                RequestPayload = """{"requestText":"Plan bearing replacement for P-101.","assetIds":["P-101"]}""",
+                RequestPayload = ApprovalTestSupport.RequestPayload(),
                 Status = PlanningJobStatus.Succeeded,
                 CreatedAtUtc = DateTimeOffset.UtcNow,
                 CompletedAtUtc = DateTimeOffset.UtcNow,
@@ -236,7 +244,7 @@ public sealed class CandidateAggregationRegressionTests
                       "result": {
                         "candidates": [
                           {
-                            "taskPlacements": [],
+                            "taskPlacements": {{StableIdPlacementsJson}},
                             "rationale": "Candidate 1",
                             "evidenceReferences": [],
                             "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
@@ -244,7 +252,7 @@ public sealed class CandidateAggregationRegressionTests
                             "isLowestCostCandidate": false
                           },
                           {
-                            "taskPlacements": [],
+                            "taskPlacements": {{LowestCostPlacementsJson}},
                             "rationale": "Candidate 2",
                             "evidenceReferences": [],
                             "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
@@ -272,9 +280,9 @@ public sealed class CandidateAggregationRegressionTests
             await dbContext.SaveChangesAsync();
         }
 
-        // Act: Attempt approval
+        // Act: Attempt approval of the explicitly selected first candidate
         var approvalService = fixture.ServiceProvider.GetRequiredService<IDraftApprovalService>();
-        var result = await approvalService.ApproveDraftAsync(jobId, CancellationToken.None);
+        var result = await approvalService.ApproveDraftAsync(jobId, candidateIndex: 0, CancellationToken.None);
 
         // Assert: Fails with insufficient inventory
         Assert.False(result.Succeeded);
@@ -324,7 +332,7 @@ public sealed class CandidateAggregationRegressionTests
             builder.Services.AddDbContext<MaintenancePlannerDbContext>(db =>
                 db.UseSqlite(connectionString));
             builder.Services.AddScoped<IMaintenancePlannerQueries, MaintenancePlannerQueries>();
-            builder.Services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            builder.Services.AddApprovalServices();
 
             var app = builder.Build();
 

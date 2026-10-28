@@ -24,4 +24,15 @@
     <ProjectReference Include="..\..\src\MaintenancePlanner.Api\MaintenancePlanner.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Include="..\..\data\manuals\*.txt;..\..\data\manuals\*.pdf">
+      <Link>data\manuals\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="..\..\data\fixtures\plant01\*.csv;..\..\data\fixtures\plant01\*.json;..\..\data\fixtures\plant01\*.pdf">
+      <Link>data\fixtures\plant01\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

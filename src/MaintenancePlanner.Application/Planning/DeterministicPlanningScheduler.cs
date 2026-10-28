@@ -9,7 +9,9 @@ public sealed class DeterministicPlanningScheduler(
     PlanningCandidateValidator validator,
     CandidateCostCalculator costCalculator)
 {
-    private static readonly TimeSpan SchedulingIncrement = TimeSpan.FromMinutes(30);
+    // The documented time granularity: placements start on this grid, and imports require durations and
+    // availability bounds that fit it.
+    public static readonly TimeSpan SchedulingIncrement = TimeSpan.FromMinutes(30);
     private const int MaximumCandidates = 2;
 
     public async Task<PlanningScheduleResult> ScheduleAsync(
@@ -155,6 +157,39 @@ public sealed class DeterministicPlanningScheduler(
             return Result(PlanningScheduleOutcome.InvalidInput, scopeViolations);
         }
 
+        // Work completed on the approved plan being replaced is not scheduled again; the remaining tasks treat a
+        // completed predecessor as satisfied.
+        var completedTaskIds = new HashSet<string>(request.CompletedTaskIds, StringComparer.OrdinalIgnoreCase);
+        foreach (var completedTaskId in completedTaskIds)
+        {
+            requiredTasks.Remove(completedTaskId);
+            requestedTaskIds.Remove(completedTaskId);
+        }
+
+        if (requiredTasks.Count == 0)
+        {
+            return Invalid(
+                "NO_REMAINING_WORK",
+                "Every required task is already completed; there is no remaining work to schedule.",
+                taskId: null,
+                resourceId: null);
+        }
+
+        // Work in progress on the approved plan being replaced keeps its approved placement (FR08)
+        var inProgressPlacements = new Dictionary<string, PlanningTaskPlacement>(StringComparer.OrdinalIgnoreCase);
+        foreach (var inProgress in request.InProgressPlacements)
+        {
+            if (!requiredTasks.TryGetValue(inProgress.TaskId, out var inProgressTask) ||
+                !inProgressPlacements.TryAdd(inProgressTask.Id, inProgress with { TaskId = inProgressTask.Id }))
+            {
+                return Invalid(
+                    "IN_PROGRESS_TASK_OUT_OF_SCOPE",
+                    $"Task {inProgress.TaskId} is in progress on the approved plan being replaced but is not in the replacement's task scope.",
+                    inProgress.TaskId,
+                    inProgress.TaskId);
+            }
+        }
+
         var orderedTasks = OrderTasks(requiredTasks, assetsById, out var dependencyViolation);
         if (dependencyViolation is not null)
         {
@@ -219,11 +254,13 @@ public sealed class DeterministicPlanningScheduler(
             }
 
             var requiredQuantity = requirement.Sum(requiredTask => requiredTask.RequiredPartQuantity);
-            if (part.AvailableQuantity < requiredQuantity)
+            // A replacement may also use what the approved plan it replaces holds, since its approval releases that
+            var availableQuantity = part.AvailableQuantity + ReleasableQuantity(request.ReleasableReservedQuantities, part.Id);
+            if (availableQuantity < requiredQuantity)
             {
                 hardBlockers.Add(new PlanningValidationViolation(
                     "PART_UNAVAILABLE",
-                    $"Spare part {part.Id} has {part.AvailableQuantity} available but {requiredQuantity} is required across the requested scope.",
+                    $"Spare part {part.Id} has {availableQuantity} available but {requiredQuantity} is required across the requested scope.",
                     task.Id,
                     part.Id));
             }
@@ -245,7 +282,8 @@ public sealed class DeterministicPlanningScheduler(
         var criticalPathMinutes = new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         foreach (var task in orderedTasks)
         {
-            var predecessorMinutes = string.IsNullOrWhiteSpace(task.PredecessorTaskId)
+            var predecessorMinutes = string.IsNullOrWhiteSpace(task.PredecessorTaskId) ||
+                                     completedTaskIds.Contains(task.PredecessorTaskId)
                 ? 0
                 : criticalPathMinutes[task.PredecessorTaskId];
             criticalPathMinutes[task.Id] = predecessorMinutes + task.DurationMinutes;
@@ -373,6 +411,8 @@ public sealed class DeterministicPlanningScheduler(
                 technicians,
                 policy,
                 lockedTaskAssignments,
+                completedTaskIds,
+                inProgressPlacements,
                 cancellationToken,
                 out var schedulingViolation);
             if (candidate is null)
@@ -383,7 +423,11 @@ public sealed class DeterministicPlanningScheduler(
             }
 
             var validation = await validator.ValidateAsync(
-                new PlanningCandidateValidationRequest(request.AssetIds, window.Id, candidate),
+                new PlanningCandidateValidationRequest(request.AssetIds, window.Id, candidate)
+                {
+                    CompletedTaskIds = request.CompletedTaskIds,
+                    ReleasableReservedQuantities = request.ReleasableReservedQuantities
+                },
                 cancellationToken);
             if (!validation.IsFeasible)
             {
@@ -598,16 +642,49 @@ public sealed class DeterministicPlanningScheduler(
         IReadOnlyList<TechnicianReadModel> technicians,
         SchedulingPolicy policy,
         IReadOnlyDictionary<string, string>? lockedTaskAssignments,
+        IReadOnlySet<string> completedTaskIds,
+        IReadOnlyDictionary<string, PlanningTaskPlacement> inProgressPlacements,
         CancellationToken cancellationToken,
         out PlanningValidationViolation? violation)
     {
         var placements = new List<PlanningTaskPlacement>(orderedTasks.Count);
         var placementsByTaskId = new Dictionary<string, PlanningTaskPlacement>(StringComparer.OrdinalIgnoreCase);
+
+        // Work in progress keeps its approved placement; it is placed first so the other tasks are fitted around its
+        // technicians' time. The candidate validator still checks it against current data.
+        foreach (var task in orderedTasks)
+        {
+            if (inProgressPlacements.TryGetValue(task.Id, out var inProgress))
+            {
+                placements.Add(inProgress);
+                placementsByTaskId.Add(task.Id, inProgress);
+            }
+        }
+
         foreach (var task in orderedTasks)
         {
             cancellationToken.ThrowIfCancellationRequested();
+            if (inProgressPlacements.ContainsKey(task.Id))
+            {
+                if (!string.IsNullOrWhiteSpace(task.PredecessorTaskId) &&
+                    !completedTaskIds.Contains(task.PredecessorTaskId) &&
+                    (!placementsByTaskId.TryGetValue(task.PredecessorTaskId, out var inProgressPredecessor) ||
+                     inProgressPredecessor.End > placementsByTaskId[task.Id].Start))
+                {
+                    violation = new PlanningValidationViolation(
+                        "IN_PROGRESS_TASK_NOT_PRESERVABLE",
+                        $"Task {task.Id} is in progress at its approved time, but its unfinished predecessor {task.PredecessorTaskId} cannot be scheduled before it.",
+                        task.Id,
+                        task.PredecessorTaskId);
+                    return null;
+                }
+
+                continue;
+            }
+
             var earliestStart = window.Start;
-            if (!string.IsNullOrWhiteSpace(task.PredecessorTaskId))
+            if (!string.IsNullOrWhiteSpace(task.PredecessorTaskId) &&
+                !completedTaskIds.Contains(task.PredecessorTaskId))
             {
                 if (!placementsByTaskId.TryGetValue(task.PredecessorTaskId, out var predecessor))
                 {
@@ -689,11 +766,18 @@ public sealed class DeterministicPlanningScheduler(
 
             if (placement is null)
             {
-                violation = new PlanningValidationViolation(
-                    "NO_HEURISTIC_SLOT",
-                    $"The bounded {policy.Name} policy could not find a 30-minute-grid slot and qualified crew for task {task.Id} in window {window.Id}.",
-                    task.Id,
-                    window.Id);
+                // FR05: a lock is never dropped to find a slot; the conflict names the lock so the user can resolve it
+                violation = lockedTaskAssignments?.TryGetValue(task.Id, out var blockingTechnicianId) == true
+                    ? new PlanningValidationViolation(
+                        "LOCKED_ASSIGNMENT_NOT_SCHEDULABLE",
+                        $"Task {task.Id} is locked to technician {blockingTechnicianId}, but the bounded {policy.Name} policy found no 30-minute-grid slot in window {window.Id} where {blockingTechnicianId} and a full qualified crew are free. Unlock the task or lock it to another technician.",
+                        task.Id,
+                        blockingTechnicianId)
+                    : new PlanningValidationViolation(
+                        "NO_HEURISTIC_SLOT",
+                        $"The bounded {policy.Name} policy could not find a 30-minute-grid slot and qualified crew for task {task.Id} in window {window.Id}.",
+                        task.Id,
+                        window.Id);
                 return null;
             }
 
@@ -712,7 +796,9 @@ public sealed class DeterministicPlanningScheduler(
                 task.SourceSection,
                 Excerpt: null))
             .ToArray();
-        return new PlanningCandidate(placements, policy.Rationale, evidenceReferences);
+        // Placements are reported in plan (dependency) order, wherever the in-progress ones were placed
+        var orderedPlacements = orderedTasks.Select(task => placementsByTaskId[task.Id]).ToList();
+        return new PlanningCandidate(orderedPlacements, policy.Rationale, evidenceReferences);
     }
 
     private static bool HasAvailableGridSlot(
@@ -766,6 +852,9 @@ public sealed class DeterministicPlanningScheduler(
             !placement.TechnicianIds.Contains(technicianId, StringComparer.OrdinalIgnoreCase) ||
             start >= placement.End ||
             placement.Start >= end);
+
+    private static decimal ReleasableQuantity(IReadOnlyDictionary<string, decimal> releasable, string partId) =>
+        releasable.FirstOrDefault(entry => string.Equals(entry.Key, partId, StringComparison.OrdinalIgnoreCase)).Value;
 
     private static string DetermineDeferralReason(
         string taskId,

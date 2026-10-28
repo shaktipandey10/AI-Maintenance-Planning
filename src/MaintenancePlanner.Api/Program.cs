@@ -1,7 +1,10 @@
+using MaintenancePlanner.Api;
 using MaintenancePlanner.Api.Endpoints;
 using MaintenancePlanner.Api.Workers;
 using MaintenancePlanner.Application.Approvals;
 using MaintenancePlanner.Application.Edits;
+using MaintenancePlanner.Application.History;
+using MaintenancePlanner.Application.Imports;
 using MaintenancePlanner.Application.Locks;
 using MaintenancePlanner.Application.PlanningJobs;
 using MaintenancePlanner.Application.Planning;
@@ -9,6 +12,7 @@ using MaintenancePlanner.Application.Queries;
 using MaintenancePlanner.Application.Validation;
 using MaintenancePlanner.Infrastructure.Approvals;
 using MaintenancePlanner.Infrastructure.Edits;
+using MaintenancePlanner.Infrastructure.Imports;
 using MaintenancePlanner.Infrastructure.Locks;
 using MaintenancePlanner.Infrastructure.Persistence;
 using MaintenancePlanner.Infrastructure.ManualEvidence;
@@ -23,15 +27,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddOpenApi();
 builder.Services.AddSwaggerGen();
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        policy.AllowAnyOrigin()
-              .AllowAnyMethod()
-              .AllowAnyHeader();
-    });
-});
+builder.Services.AddFrontendCors();
 builder.Services.AddScoped<IMaintenancePlannerQueries, MaintenancePlannerQueries>();
 builder.Services.AddScoped<ISparePartReadModelProvider>(sp =>
     new ScenarioAwareSparePartReadModelProvider(
@@ -69,19 +65,38 @@ builder.Services.AddSingleton<PdfManualEvidenceRetriever>(_ =>
             "MAN-P102-SCOPE-001.pdf")),
         "MAN-P102-SCOPE-001",
         "1.0"));
+// PDF manuals imported at run time (FR02); the bundled manuals' document IDs above are reserved
+builder.Services.AddSingleton(_ => new ImportedManualStore(
+    Path.GetFullPath(builder.Configuration["ManualImports:Directory"] ?? Path.Combine(
+        builder.Environment.ContentRootPath,
+        "..",
+        "..",
+        "data",
+        "manuals",
+        "imported")),
+    ["MAN-P101-001", "MAN-P101-PLANNING-001", "MAN-P102-SCOPE-001"]));
+builder.Services.AddSingleton<ImportedManualEvidenceRetriever>();
 builder.Services.AddSingleton<IManualEvidenceRetriever>(serviceProvider =>
     new CompositeManualEvidenceRetriever(
     [
         serviceProvider.GetRequiredService<TextManualEvidenceRetriever>(),
-        .. serviceProvider.GetServices<PdfManualEvidenceRetriever>()
+        .. serviceProvider.GetServices<PdfManualEvidenceRetriever>(),
+        serviceProvider.GetRequiredService<ImportedManualEvidenceRetriever>()
     ]));
+builder.Services.AddScoped<BusinessActor>();
+builder.Services.AddScoped<IReferenceDataImportService, ReferenceDataImportService>();
+builder.Services.AddScoped<IManualImportService, ManualImportService>();
 builder.Services.AddOllamaPlanningInterpreter(builder.Configuration);
 builder.Services.AddScoped<IPlanningWorkflow, PlanningWorkflow>();
 builder.Services.AddScoped<IPlanningJobs, PlanningJobs>();
 builder.Services.AddScoped<IPlanningJobProcessor, PlanningJobProcessor>();
+builder.Services.AddScoped<PlanningJobExecutionContext>();
+builder.Services.AddScoped<IPlanningInterpretationCheckpointSink, PlanningJobCheckpointWriter>();
 builder.Services.AddScoped<IDraftApprovalService, DraftApprovalService>();
 builder.Services.AddScoped<ITaskEditorService, TaskEditorService>();
+builder.Services.AddScoped<EditedPlanValidator>();
 builder.Services.AddScoped<IEditValidationService, EditValidationService>();
+builder.Services.AddScoped<IEditRevisionService, EditRevisionService>();
 builder.Services.AddScoped<ITaskLockService, TaskLockService>();
 builder.Services.AddScoped<IPlanProgressService, PlanProgressService>();
 builder.Services.AddScoped<IPlanExportService, PlanExportService>();
@@ -118,14 +133,17 @@ if (app.Environment.IsDevelopment())
     });
 }
 
-app.UseCors("AllowFrontend");
+app.UseCors(FrontendCors.PolicyName);
 app.UseHttpsRedirection();
+app.UseBusinessActorFromHeader();
 
 app.MapMaintenancePlannerEndpoints();
 app.MapPlanningJobEndpoints();
 app.MapApprovalEndpoints();
 app.MapEditEndpoints();
 app.MapPlanProgressEndpoints();
+app.MapImportEndpoints();
+app.MapHistoryEndpoints();
 
 var summaries = new[]
 {

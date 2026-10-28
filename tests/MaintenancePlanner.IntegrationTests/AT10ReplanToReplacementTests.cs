@@ -281,7 +281,7 @@ public sealed class AT10ReplanToReplacementTests
         {
             Id = jobId,
             OperationId = Guid.NewGuid(),
-            RequestPayload = """{"requestText":"Plan bearing replacement","assetIds":["P-101"]}""",
+            RequestPayload = ApprovalTestSupport.RequestPayload("Plan bearing replacement"),
             Status = PlanningJobStatus.Succeeded,
             ResultPayload = CreateCandidatesResult(),
             CreatedAtUtc = DateTimeOffset.UtcNow,
@@ -291,37 +291,8 @@ public sealed class AT10ReplanToReplacementTests
         await dbContext.SaveChangesAsync();
     }
 
-    private static string CreateCandidatesResult()
-    {
-        return """
-            {
-              "outcome": "CandidatesGenerated",
-              "result": {
-                "candidates": [
-                  {
-                    "taskPlacements": [],
-                    "rationale": "Test candidate requiring BR-101",
-                    "evidenceReferences": [],
-                    "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
-                    "dependencyTaskIds": []
-                  }
-                ],
-                "assumptions": [],
-                "evidenceReferences": [],
-                "interpretation": {
-                  "maintenanceIntent": "Replace bearing",
-                  "scope": "P-101",
-                  "proposedAssetIds": ["P-101"],
-                  "proposedTaskIds": ["P101-BEARING-REPLACEMENT"],
-                  "missingInformation": [],
-                  "assumptions": [],
-                  "scopeResolution": "Resolved",
-                  "scopeMappings": []
-                }
-              }
-            }
-            """;
-    }
+    // Approval revalidates the candidate, so this is a schedulable P-101 plan requiring one BR-101.
+    private static string CreateCandidatesResult() => ApprovalTestSupport.ResultPayload();
 
     private sealed class TestFixture : IAsyncDisposable
     {
@@ -359,7 +330,7 @@ public sealed class AT10ReplanToReplacementTests
             var services = new ServiceCollection();
             services.AddDbContext<MaintenancePlannerDbContext>(db =>
                 db.UseSqlite(connectionString));
-            services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            services.AddApprovalServices();
             services.AddScoped<IPlanningJobs, PlanningJobs>();
 
             var serviceProvider = services.BuildServiceProvider();

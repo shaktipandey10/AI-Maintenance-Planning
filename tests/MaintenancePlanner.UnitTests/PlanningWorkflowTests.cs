@@ -597,11 +597,42 @@ public sealed class PlanningWorkflowTests
         Assert.Empty(crossDocConflicts);
     }
 
+    [Theory]
+    [InlineData("This inspection-only scope applies to P-102. Do not use it for other pumps.", false)]
+    [InlineData("Do not use the standard bearing replacement method. Use an inspection only method instead.", true)]
+    [InlineData("Do not schedule the P-101 bearing replacement before the P-102 inspection.", true)]
+    public async Task ExecuteAsync_CrossDocumentStatementNamingOnlyOtherAssets_IsNotAConflictForThisAsset(
+        string otherDocumentExcerpt,
+        bool expectConflict)
+    {
+        var fixture = CreateFixture(includeP102: true, crossDocumentExcerpt: otherDocumentExcerpt);
+        fixture.Interpreter.Setup(interpreter =>
+                interpreter.InterpretAsync(
+                    CompleteRequest,
+                    It.IsAny<IReadOnlyList<AssetReadModel>>(),
+                    It.IsAny<IReadOnlyList<MaintenanceTaskReadModel>>(),
+                    It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Interpretation(RequiredTasks));
+
+        var result = await fixture.Workflow.ExecuteAsync(CompleteRequest, CancellationToken.None);
+
+        if (expectConflict)
+        {
+            var unavailable = Assert.IsType<PlanningDataUnavailableResult>(result);
+            Assert.Contains(unavailable.Violations, violation => violation.Code == "MANUAL_EVIDENCE_CONFLICT_CROSS_DOCUMENT");
+        }
+        else
+        {
+            Assert.IsType<PlanningCandidatesGeneratedResult>(result);
+        }
+    }
+
     private static WorkflowFixture CreateFixture(
         IReadOnlyList<SparePartReadModel>? spareParts = null,
         decimal availableBearingQuantity = 1,
         bool includeP102 = false,
-        bool includeP101Inspection = false)
+        bool includeP101Inspection = false,
+        string? crossDocumentExcerpt = null)
     {
         var seed = P101AnchorSeed.Create();
         var assets = new List<AssetReadModel>
@@ -736,6 +767,11 @@ public sealed class PlanningWorkflowTests
                     "MAN-P102-SCOPE-001" => new List<PlanningEvidenceReference>
                     {
                         new(PlanningEvidenceSourceKind.MaintenanceManual, "MAN-P102-SCOPE-001", "MAN-P102-SCOPE-001", null, 1, "Inspection", "Inspection evidence")
+                    },
+                    null when crossDocumentExcerpt is not null => new List<PlanningEvidenceReference>
+                    {
+                        new(PlanningEvidenceSourceKind.MaintenanceManual, "MAN-P101-001", "MAN-P101-001", null, 1, "Planning assumptions", "Planning evidence"),
+                        new(PlanningEvidenceSourceKind.MaintenanceManual, "MAN-OTHER-001", "MAN-OTHER-001", null, 1, "Other", crossDocumentExcerpt)
                     },
                     null when includeP102 => new List<PlanningEvidenceReference>
                     {

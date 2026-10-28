@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using MaintenancePlanner.Application.History;
 using MaintenancePlanner.Application.PlanningJobs;
 using MaintenancePlanner.Domain.Entities;
 using MaintenancePlanner.Infrastructure.Persistence;
@@ -8,7 +9,9 @@ using Microsoft.EntityFrameworkCore;
 
 namespace MaintenancePlanner.Infrastructure.PlanningJobs;
 
-public sealed class PlanningJobs(MaintenancePlannerDbContext dbContext) : IPlanningJobs
+public sealed class PlanningJobs(
+    MaintenancePlannerDbContext dbContext,
+    BusinessActor? actor = null) : IPlanningJobs
 {
     public async Task<PlanningJobCreationResult> CreateAsync(
         Guid operationId,
@@ -287,6 +290,42 @@ public sealed class PlanningJobs(MaintenancePlannerDbContext dbContext) : IPlann
         return false;
     }
 
+    public async Task<bool> ReleaseAsync(
+        Guid jobId,
+        Guid leaseToken,
+        int expectedVersion,
+        CancellationToken cancellationToken)
+    {
+        // Unlike Complete/Fail, an expired lease is not required: a reclaim replaces the lease token and the
+        // version atomically, so a matching token and version prove that no other worker owns the job.
+        var updatedCount = await dbContext.PlanningJobs
+            .Where(job =>
+                job.Id == jobId &&
+                job.Status == PlanningJobStatus.Running &&
+                job.WorkerLeaseToken == leaseToken &&
+                job.ConcurrencyVersion == expectedVersion &&
+                job.AttemptCount > 0)
+            .ExecuteUpdateAsync(setters => setters
+                .SetProperty(job => job.Status, PlanningJobStatus.Queued)
+                .SetProperty(job => job.CurrentStep, "Queued")
+                .SetProperty(job => job.AttemptCount, job => job.AttemptCount - 1)
+                .SetProperty(job => job.WorkerLeaseToken, (Guid?)null)
+                .SetProperty(job => job.LeaseExpiresAtUnixMilliseconds, (long?)null)
+                .SetProperty(job => job.ConcurrencyVersion, job => job.ConcurrencyVersion + 1),
+                cancellationToken);
+
+        if (updatedCount == 1)
+            return true;
+
+        await ThrowIfVersionConflictAsync(
+            jobId,
+            leaseToken,
+            expectedVersion,
+            DateTimeOffset.UtcNow.ToUnixTimeMilliseconds(),
+            cancellationToken);
+        return false;
+    }
+
     private async Task ThrowIfVersionConflictAsync(
         Guid jobId,
         Guid leaseToken,
@@ -418,6 +457,13 @@ public sealed class PlanningJobs(MaintenancePlannerDbContext dbContext) : IPlann
         };
 
         await dbContext.PlanningJobs.AddAsync(job, cancellationToken);
+        // FR09: recorded with the new job; a retried request with the same operation ID records nothing
+        var history = dbContext.RecordBusinessAction(
+            actor,
+            BusinessActions.ReplanRequested,
+            job.Id,
+            null,
+            details: $"Replacement planning job {job.Id} requested for approved job {originalJobId}.");
         try
         {
             await dbContext.SaveChangesAsync(cancellationToken);
@@ -426,6 +472,7 @@ public sealed class PlanningJobs(MaintenancePlannerDbContext dbContext) : IPlann
             exception.InnerException is SqliteException { SqliteExtendedErrorCode: 2067 })
         {
             dbContext.Entry(job).State = EntityState.Detached;
+            dbContext.Entry(history).State = EntityState.Detached;
             existingJob = await dbContext.PlanningJobs.AsNoTracking()
                 .SingleOrDefaultAsync(existing => existing.OperationId == operationId, cancellationToken);
 

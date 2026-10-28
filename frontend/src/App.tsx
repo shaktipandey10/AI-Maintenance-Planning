@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AlternativesScreen } from './screens/AlternativesScreen'
 import { ApprovalScreen } from './screens/ApprovalScreen'
 import { DraftDetailScreen } from './screens/DraftDetailScreen'
 import { ProgressScreen } from './screens/ProgressScreen'
-import type { CandidateResponse, InterpretationResponse } from './types/api'
+import { apiClient } from './services/apiClient'
+import type { CandidateResponse, InterpretationResponse, SavedPlanResponse } from './types/api'
 import './App.css'
 
 interface JobStatus {
@@ -31,6 +32,28 @@ function App() {
   const [selectedInterpretation, setSelectedInterpretation] = useState<InterpretationResponse | undefined>()
   const [selectedCandidateIndex, setSelectedCandidateIndex] = useState<number>(0)
   const [draftId, setDraftId] = useState<string | null>(null)
+
+  // The selected role is recorded by the API as the performer of every business action (FR09)
+  useEffect(() => {
+    apiClient.setActorRole(role)
+  }, [role])
+
+  // Saved plans, so a plan can be reopened without its draft ID (FR09)
+  const [savedPlans, setSavedPlans] = useState<SavedPlanResponse[] | null>(null)
+  const [savedPlansError, setSavedPlansError] = useState<string | null>(null)
+  const loadSavedPlans = useCallback(async () => {
+    try {
+      setSavedPlans(await apiClient.getSavedPlans())
+      setSavedPlansError(null)
+    } catch (err) {
+      setSavedPlansError(err instanceof Error ? err.message : 'Failed to load saved plans')
+    }
+  }, [])
+
+  // Reloaded on every screen change, so the list is current whenever the dashboard is shown again
+  useEffect(() => {
+    loadSavedPlans()
+  }, [currentScreen, loadSavedPlans])
 
   // Create Job States
   const [requestText, setRequestText] = useState('')
@@ -178,6 +201,9 @@ function App() {
     }
   }
 
+  // Open an existing draft by ID (draft management: details, progress, edits, exports, replan)
+  const [openDraftId, setOpenDraftId] = useState('')
+
   const [clarWindowId, setClarWindowId] = useState('')
   const [clarLoading, setClarLoading] = useState(false)
   const [clarError, setClarError] = useState<string | null>(null)
@@ -287,6 +313,7 @@ function App() {
         draftId={draftId}
         onBack={handleBackFromDraftDetail}
         onProceedToProgress={handleProceedToProgress}
+        onOpenJobAlternatives={handleViewAlternatives}
       />
     )
   }
@@ -534,6 +561,79 @@ function App() {
               </>
             )
           })()}
+        </div>
+
+        {/* Tile: Open an existing draft */}
+        <div className="tile">
+          <div className="tile-header">
+            <h2>Open Draft</h2>
+            <span className="tile-icon">🗂</span>
+          </div>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              if (openDraftId.trim()) {
+                handleOpenDraftDetail(openDraftId.trim())
+              }
+            }}
+            className="tile-form"
+          >
+            <div className="form-group">
+              <label htmlFor="openDraftId">Draft ID *</label>
+              <input
+                id="openDraftId"
+                type="text"
+                value={openDraftId}
+                onChange={(e) => setOpenDraftId(e.target.value)}
+                placeholder="Paste Draft ID here"
+                className="input"
+              />
+            </div>
+
+            <button type="submit" className="btn btn-primary btn-block" disabled={!openDraftId.trim()}>
+              → Open Draft
+            </button>
+          </form>
+        </div>
+
+        {/* Tile: Saved plans */}
+        <div className="tile">
+          <div className="tile-header">
+            <h2>Saved Plans</h2>
+            <span className="tile-icon">📚</span>
+          </div>
+
+          {savedPlansError && <div className="alert alert-error">{savedPlansError}</div>}
+          {savedPlans && savedPlans.length === 0 && <p>No saved plans yet.</p>}
+          {savedPlans && savedPlans.length > 0 && (
+            <ul className="saved-plans" data-testid="saved-plans" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {savedPlans.map((plan) => (
+                <li key={plan.draftId} style={{ padding: '8px 0', borderBottom: '1px solid #dee2e6' }}>
+                  <div>
+                    <span className={`status-badge status-${plan.status.toLowerCase()}`}>{plan.status}</span>{' '}
+                    <strong>{plan.assetIds.join(', ') || 'No assets'}</strong>
+                    {plan.windowId && <> · {plan.windowId}</>}
+                    {plan.originalJobId && <> · revision</>}
+                  </div>
+                  <div style={{ fontSize: '0.85em', color: '#6c757d' }}>
+                    Saved {new Date(plan.createdAtUtc).toLocaleString()} · draft <code>{plan.draftId}</code>
+                  </div>
+                  {plan.requestText && (
+                    <div style={{ fontSize: '0.85em' }}>{plan.requestText}</div>
+                  )}
+                  <button
+                    onClick={() => handleOpenDraftDetail(plan.draftId)}
+                    className="btn btn-secondary"
+                    style={{ marginTop: '4px' }}
+                  >
+                    → Open plan
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          <button onClick={loadSavedPlans} className="btn btn-link">↻ Refresh</button>
         </div>
 
         {/* Tile 3: Recently Created Job */}

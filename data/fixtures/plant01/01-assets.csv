@@ -1,0 +1,5 @@
+id,plantId,name,model,priority
+P-102,PLANT-01,Cooling Water Pump P-102,CP-100,2
+P-103,PLANT-01,Instrument Air Compressor P-103,AC-300,3
+P-104,PLANT-01,Conveyor Drive Motor P-104,MD-400,4
+P-105,PLANT-01,Boiler Feed Pump P-105,FP-500,5

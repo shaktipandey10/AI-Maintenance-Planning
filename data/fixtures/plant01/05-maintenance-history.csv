@@ -1,0 +1,12 @@
+id,assetId,performedAt,summary,outcome,sourceDocumentId,sourceReference
+H-P101-2025-01,P-101,2025-02-08T09:00:00+05:30,Preparation and bearing replacement on P-101 completed in the planned 60 and 180 minutes,Completed; vibration within limits,MAN-P101-001,Planning assumptions: Bearing replacement
+H-P101-2025-02,P-101,2025-08-16T10:00:00+05:30,P-101 verification after bearing replacement took 120 minutes,Completed,MAN-P101-001,Planning assumptions: Verification
+H-P101-2026-01,P-101,2026-03-14T08:30:00+05:30,P-101 bearing replacement took 240 minutes with three technicians instead of the manual's 180 minutes with two,Completed late; differs from manual estimate,MAN-P101-001,Planning assumptions: Bearing replacement
+H-P102-2025-01,P-102,2025-04-12T09:00:00+05:30,P-102 inspection completed in 90 minutes,Completed; seal wear noted,MAN-P102-SCOPE-001,Inspection-only scope
+H-P102-2025-02,P-102,2025-11-22T11:00:00+05:30,P-102 mechanical seal replaced,Completed,MAN-PLANT01-SERVICE-001,P-102 seal replacement
+H-P103-2025-01,P-103,2025-05-10T08:00:00+05:30,P-103 intake filter element replaced,Completed,MAN-PLANT01-SERVICE-001,P-103 filter replacement
+H-P103-2025-02,P-103,2025-05-10T09:00:00+05:30,P-103 leak test after filter replacement,Passed,MAN-PLANT01-SERVICE-001,P-103 leak test
+H-P104-2025-01,P-104,2025-06-21T08:00:00+05:30,P-104 flexible coupling replaced,Completed,MAN-PLANT01-SERVICE-001,P-104 coupling replacement
+H-P104-2025-02,P-104,2025-06-21T09:30:00+05:30,P-104 alignment check after coupling replacement,Passed,MAN-PLANT01-SERVICE-001,P-104 alignment check
+H-P105-2025-01,P-105,2025-09-06T08:00:00+05:30,P-105 flange gasket replaced,Completed,MAN-PLANT01-SERVICE-001,P-105 gasket replacement
+H-P105-2025-02,P-105,2025-09-06T09:00:00+05:30,P-105 pressure test after gasket replacement,Passed,MAN-PLANT01-SERVICE-001,P-105 pressure test

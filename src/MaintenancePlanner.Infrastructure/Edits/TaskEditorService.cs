@@ -1,5 +1,6 @@
 using System.Text.Json;
 using MaintenancePlanner.Application.Edits;
+using MaintenancePlanner.Application.History;
 using MaintenancePlanner.Domain.Entities;
 using MaintenancePlanner.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +8,8 @@ using Microsoft.EntityFrameworkCore;
 namespace MaintenancePlanner.Infrastructure.Edits;
 
 public sealed class TaskEditorService(
-    MaintenancePlannerDbContext dbContext) : ITaskEditorService
+    MaintenancePlannerDbContext dbContext,
+    BusinessActor? actor = null) : ITaskEditorService
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
@@ -34,8 +36,14 @@ public sealed class TaskEditorService(
         if (string.IsNullOrEmpty(planningJob.ResultPayload))
             throw new InvalidOperationException($"Planning job {planningJob.Id} has no result");
 
-        // Parse original placements from first candidate
-        var originalPlacements = ExtractTaskPlacementsFromCandidate(planningJob.ResultPayload);
+        // The original placements are those of the approved alternative (its snapshot); drafts approved before
+        // snapshots were stored were always approved from the first candidate
+        var originalPlacements = ApprovedCandidateSnapshot.ReadPlacements(draft.ApprovedCandidatePayload) is { } approved
+            ? approved.ToDictionary(
+                placement => placement.TaskId,
+                placement => (placement.Start, placement.End, placement.TechnicianIds),
+                StringComparer.OrdinalIgnoreCase)
+            : ExtractTaskPlacementsFromCandidate(planningJob.ResultPayload);
 
         var editsToCreate = new List<EditedTaskPlacement>();
 
@@ -89,6 +97,18 @@ public sealed class TaskEditorService(
             await dbContext.EditedTaskPlacements.AddRangeAsync(editsToCreate, cancellationToken);
         }
 
+        if (request.Edits.Count > 0)
+        {
+            dbContext.RecordBusinessAction(
+                actor,
+                BusinessActions.TaskEditSubmitted,
+                draft.PlanningJobId,
+                draftId,
+                request.Edits.Count == 1 ? request.Edits[0].TaskId : null,
+                string.Join("; ", request.Edits.Select(edit =>
+                    $"{edit.TaskId}: {edit.NewStart:O} to {edit.NewEnd:O} by {string.Join(", ", edit.NewTechnicianIds)}")));
+        }
+
         await dbContext.SaveChangesAsync(cancellationToken);
 
         // Return all current edits
@@ -124,6 +144,7 @@ public sealed class TaskEditorService(
             return false;
 
         dbContext.EditedTaskPlacements.Remove(edit);
+        dbContext.RecordBusinessAction(actor, BusinessActions.TaskEditDeleted, null, draftId, edit.TaskId);
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return true;
@@ -141,6 +162,12 @@ public sealed class TaskEditorService(
             return false;
 
         dbContext.EditedTaskPlacements.RemoveRange(edits);
+        dbContext.RecordBusinessAction(
+            actor,
+            BusinessActions.TaskEditsCleared,
+            null,
+            draftId,
+            details: $"Deleted edits for {string.Join(", ", edits.Select(edit => edit.TaskId))}.");
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return true;

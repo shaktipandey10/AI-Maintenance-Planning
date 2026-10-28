@@ -1,0 +1,93 @@
+[
+  {
+    "id": "P102-INSPECTION",
+    "assetId": "P-102",
+    "name": "Inspection",
+    "durationMinutes": 90,
+    "requiredSkills": ["MECHANICAL"],
+    "crewSize": 1,
+    "sourceDocumentId": "MAN-P102-SCOPE-001",
+    "sourceSection": "Inspection-only scope"
+  },
+  {
+    "id": "P102-SEAL-REPLACEMENT",
+    "assetId": "P-102",
+    "name": "Seal replacement",
+    "durationMinutes": 60,
+    "requiredSkills": ["MECHANICAL"],
+    "crewSize": 1,
+    "requiredPartId": "SEAL-102",
+    "requiredPartQuantity": 1,
+    "sourceDocumentId": "MAN-PLANT01-SERVICE-001",
+    "sourceSection": "P-102 seal replacement"
+  },
+  {
+    "id": "P103-FILTER-REPLACEMENT",
+    "assetId": "P-103",
+    "name": "Filter replacement",
+    "durationMinutes": 60,
+    "requiredSkills": ["MECHANICAL"],
+    "crewSize": 1,
+    "requiredPartId": "FILTER-103",
+    "requiredPartQuantity": 1,
+    "sourceDocumentId": "MAN-PLANT01-SERVICE-001",
+    "sourceSection": "P-103 filter replacement"
+  },
+  {
+    "id": "P103-LEAK-TEST",
+    "assetId": "P-103",
+    "name": "Leak test",
+    "durationMinutes": 30,
+    "requiredSkills": ["INSTRUMENTATION"],
+    "crewSize": 1,
+    "predecessorTaskId": "P103-FILTER-REPLACEMENT",
+    "sourceDocumentId": "MAN-PLANT01-SERVICE-001",
+    "sourceSection": "P-103 leak test"
+  },
+  {
+    "id": "P104-COUPLING-REPLACEMENT",
+    "assetId": "P-104",
+    "name": "Coupling replacement",
+    "durationMinutes": 90,
+    "requiredSkills": ["ROTATING-EQUIPMENT"],
+    "crewSize": 1,
+    "requiredPartId": "COUPLING-104",
+    "requiredPartQuantity": 1,
+    "sourceDocumentId": "MAN-PLANT01-SERVICE-001",
+    "sourceSection": "P-104 coupling replacement"
+  },
+  {
+    "id": "P104-ALIGNMENT-CHECK",
+    "assetId": "P-104",
+    "name": "Alignment check",
+    "durationMinutes": 60,
+    "requiredSkills": ["ROTATING-EQUIPMENT"],
+    "crewSize": 1,
+    "predecessorTaskId": "P104-COUPLING-REPLACEMENT",
+    "sourceDocumentId": "MAN-PLANT01-SERVICE-001",
+    "sourceSection": "P-104 alignment check"
+  },
+  {
+    "id": "P105-GASKET-REPLACEMENT",
+    "assetId": "P-105",
+    "name": "Gasket replacement",
+    "durationMinutes": 60,
+    "requiredSkills": ["MECHANICAL"],
+    "crewSize": 1,
+    "requiredPartId": "GASKET-105",
+    "requiredPartQuantity": 1,
+    "sourceDocumentId": "MAN-PLANT01-SERVICE-001",
+    "sourceSection": "P-105 gasket replacement"
+  },
+  {
+    "id": "P105-PRESSURE-TEST",
+    "assetId": "P-105",
+    "name": "Pressure test",
+    "durationMinutes": 30,
+    "requiredSkills": ["INSTRUMENTATION"],
+    "crewSize": 1,
+    "predecessorTaskId": "P105-GASKET-REPLACEMENT",
+    "sourceDocumentId": "MAN-PLANT01-SERVICE-001",
+    "sourceSection": "P-105 pressure test"
+  }
+]

@@ -220,6 +220,35 @@ public sealed class P101LockingTests
         Assert.Contains("TECH-002", bearingPlacement.TechnicianIds, StringComparer.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task ScheduleAsync_LockThatLeavesNoSlot_IsReportedAsALockConflictInsteadOfBeingDropped()
+    {
+        // The locked technician is qualified and available for the window, but the preparation (in progress at a
+        // placement filling the whole window) leaves no slot for the locked bearing replacement
+        var fixture = CreateP101Fixture();
+        var request = new PlanningScheduleRequest(
+            ["P-101"],
+            "MW-P101-BASELINE-20261024",
+            ["P101-BEARING-REPLACEMENT"])
+        {
+            InProgressPlacements = [new PlanningTaskPlacement("P101-PREP", WindowStart, WindowStart.AddHours(8), ["TECH-003"])]
+        };
+
+        var locked = await fixture.Scheduler.ScheduleAsync(
+            request,
+            CancellationToken.None,
+            new Dictionary<string, string> { { "P101-BEARING-REPLACEMENT", "TECH-002" } });
+        var unlocked = await fixture.Scheduler.ScheduleAsync(request, CancellationToken.None, lockedTaskAssignments: null);
+
+        Assert.Empty(locked.Candidates);
+        Assert.Contains(locked.Violations, violation =>
+            violation.Code == "LOCKED_ASSIGNMENT_NOT_SCHEDULABLE" &&
+            violation.TaskId == "P101-BEARING-REPLACEMENT" &&
+            violation.ResourceId == "TECH-002" &&
+            violation.Message.Contains("locked to technician TECH-002", StringComparison.Ordinal));
+        Assert.DoesNotContain(unlocked.Violations, violation => violation.Code == "LOCKED_ASSIGNMENT_NOT_SCHEDULABLE");
+    }
+
     private static SchedulerFixture CreateP101Fixture(
         decimal availableBearingQuantity = 1,
         string windowId = "MW-P101-BASELINE-20261024",
