@@ -21,7 +21,9 @@ import type {
   TaskLockResponse,
   TaskLockChangeResult,
   EditRevisionResult,
-  EditValidationViolation
+  EditValidationViolation,
+  ImportDatasetSlug,
+  ImportReport
 } from '../types/api';
 
 // A revision from task edits was rejected; every violation of the edited plan is kept for display
@@ -649,30 +651,90 @@ export class ApiClient {
 
     return response.json();
   }
+
+  // FR02: imports a CSV or JSON file into a dataset. The report is returned whether the file was imported or rejected
+  async importDataset(dataset: ImportDatasetSlug, file: File): Promise<ImportReport> {
+    const form = new FormData();
+    form.append('file', file);
+    return this.postImport(`${API_BASE}/api/imports/${dataset}`, form);
+  }
+
+  // FR02: imports a text-based PDF manual under the given document ID and version
+  async importManual(file: File, documentId: string, version: string): Promise<ImportReport> {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('documentId', documentId);
+    form.append('version', version);
+    return this.postImport(`${API_BASE}/api/imports/manuals`, form);
+  }
+
+  // 200 (imported), 422 (rejected) and 400 (malformed upload) all carry an ImportReport; anything else is an error.
+  // The browser sets the multipart Content-Type with its boundary, so no Content-Type header is given.
+  private async postImport(url: string, form: FormData): Promise<ImportReport> {
+    let response: Response;
+    try {
+      response = await fetch(url, { method: 'POST', body: form });
+    } catch (err) {
+      throw new Error(`Could not reach the API: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    const fallback = `Import failed: ${response.status} ${response.statusText}`.trim();
+    let text = '';
+    try {
+      text = await response.text();
+    } catch {
+      throw new Error(fallback);
+    }
+
+    if (response.ok || response.status === 400 || response.status === 422) {
+      try {
+        const body = JSON.parse(text);
+        if (typeof body?.imported === 'boolean' && Array.isArray(body?.issues)) {
+          return body as ImportReport;
+        }
+      } catch {
+        // Not an import report; reported as an error below
+      }
+
+      // These statuses always carry an import report, so any other body is not from the import endpoint
+      throw new Error(`${fallback}. The response did not contain an import report.`);
+    }
+
+    throw new Error(errorMessageFromText(text, fallback));
+  }
 }
 
-// Reads an error body: a JSON string, an ApprovalErrorResponse or problem details, or plain text.
+const MAXIMUM_PLAIN_ERROR_LENGTH = 200;
+
+// Reads an error body: a JSON string, an ApprovalErrorResponse or problem details, or a short plain-text message.
 async function readErrorMessage(response: Response, fallback: string): Promise<string> {
   try {
-    const text = await response.text();
-    if (!text) {
-      return fallback;
-    }
-
-    try {
-      const body = JSON.parse(text);
-      if (typeof body === 'string') {
-        return body;
-      }
-      if (body?.reason || body?.message) {
-        return [body.reason, body.message].filter(Boolean).join(': ');
-      }
-      return body?.detail || body?.title || fallback;
-    } catch {
-      return text;
-    }
+    return errorMessageFromText(await response.text(), fallback);
   } catch {
     return fallback;
+  }
+}
+
+function errorMessageFromText(text: string, fallback: string): string {
+  if (!text) {
+    return fallback;
+  }
+
+  try {
+    const body = JSON.parse(text);
+    if (typeof body === 'string') {
+      return body;
+    }
+    if (body?.reason || body?.message) {
+      return [body.reason, body.message].filter(Boolean).join(': ');
+    }
+    return body?.detail || body?.title || fallback;
+  } catch {
+    // Only a short one-line message is shown; HTML pages, stack traces and long bodies would expose server internals
+    const message = text.trim();
+    return message.length > 0 && message.length <= MAXIMUM_PLAIN_ERROR_LENGTH && !/[\r\n<>]/.test(message)
+      ? message
+      : fallback;
   }
 }
 

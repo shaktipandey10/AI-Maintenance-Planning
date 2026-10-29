@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Text.Json.Serialization;
 
 namespace MaintenancePlanner.Application.Planning;
 
@@ -105,6 +106,13 @@ public abstract record PlanningWorkflowResult(
     IReadOnlyList<PlanningEvidenceReference> EvidenceReferences)
 {
     public required PlanningInterpretation Interpretation { get; init; }
+
+    /// <summary>
+    /// What happened to each candidate the model saved with <c>save_candidate</c> (AI03): included, or why not.
+    /// Null, and omitted from the stored result, when the model saved none.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? ModelCandidateNotes { get; init; }
 }
 
 public sealed record PlanningClarificationRequiredResult(

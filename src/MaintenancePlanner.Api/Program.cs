@@ -35,6 +35,8 @@ builder.Services.AddScoped<ISparePartReadModelProvider>(sp =>
 builder.Services.AddScoped<PlanningCandidateValidator>();
 builder.Services.AddScoped<CandidateCostCalculator>();
 builder.Services.AddScoped<DeterministicPlanningScheduler>();
+// AI03 planning tools; the model is only offered them while Ollama:EnableTools is on (off by default)
+builder.Services.AddPlanningTools();
 builder.Services.AddSingleton<TextManualEvidenceRetriever>(_ => new TextManualEvidenceRetriever(
     Path.GetFullPath(Path.Combine(
         builder.Environment.ContentRootPath,

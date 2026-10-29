@@ -1,0 +1,156 @@
+# AI03 Stage 3 evidence - REAL-MODEL verification run (real Ollama 0.40.12, qwen2.5:7b; one planning request against a verified database copy)
+# Run date: 2026-10-29 (local time +05:30). Summary written from the captured run files listed in section 9; every value below is copied from them.
+# Raw request/response bodies, proxy logs, API log, database copy and scripts are kept OUTSIDE the repository in the scratch folder:
+#   $S = C:\Users\windows10\AppData\Local\Temp\claude\d--repos-repos-ABB-AI-POC-AI-Maintanance-Planner\032de528-8e46-441e-95d5-7530ea666ce0\scratchpad\ai03-realmodel
+# They contain application data (request text, catalogue, stock, technician data, model output); nothing was redacted.
+
+== 0. OUTCOME (confirmed) ==
+Planning job c72a938b-07b9-48e7-852f-d25ab944d570: Status Failed, FailureCode OLLAMA_TIMEOUT, "Ollama did not respond within 180 seconds.", attempts 2 of 2, ResultPayload null.
+- The real model DID use the tool-calling protocol: it returned well-formed tool_calls, the application executed them through PlanningToolDispatcher, and results/errors went back as tool messages.
+- The job failed on time, not on protocol: on this machine the model ran on CPU (ollama ps: "100% CPU", context 4096), and two requests exceeded the API's 180-second per-request timeout.
+- No final interpretation was accepted, so scheduling (and the expected stock infeasibility for BR-101) was never reached.
+
+== 1. ENVIRONMENT ==
+Repository HEAD: 1376af56666645488163faa4f48afbf0c83fbbe9, with uncommitted changes: AI03 source (Program.cs, OllamaOptions.cs, OllamaPlanningRequestInterpreter.cs,
+  OllamaPlanningServiceCollectionExtensions.cs modified; Planning/Tools/ and PlanningToolServiceCollectionExtensions.cs new), AI03 tests and docs, and the
+  pre-existing modification of maintenance-planner.db. The API was built and run from this working tree.
+ollama --version: "ollama version is 0.40.12" (exit 0)
+ollama show qwen2.5:7b (exit 0): architecture qwen2, parameters 7.6B, context length 32768, quantization Q4_K_M, capabilities: completion, tools
+ollama ps (after the run): qwen2.5:7b, 5.1 GB, PROCESSOR "100% CPU", CONTEXT 4096, RUNNER llamacpp
+
+== 2. PROCESS-SCOPED CONFIGURATION (environment variables set only for the API process; no tracked file changed) ==
+ConnectionStrings__MaintenancePlanner=Data Source=$S\maintenance-planner.ai03-verification.db
+Ollama__EnableTools=true
+Ollama__BaseUrl=http://127.0.0.1:11435          (logging proxy -> 127.0.0.1:11434)
+Logging__LogLevel__Microsoft.EntityFrameworkCore.Database.Connection=Debug
+Command: dotnet run --project src/MaintenancePlanner.Api --launch-profile http   (Development, http://localhost:5083; API PID 5788, dotnet run PID 6544)
+Unchanged from appsettings.json: Ollama Model qwen2.5:7b, TimeoutSeconds 180; MaxToolCalls default 6. No secrets involved.
+Proxy: python -I ollama_logging_proxy.py --listen 127.0.0.1:11435 --upstream 127.0.0.1:11434 --upstream-timeout 900 --log-dir $S\run\proxy-log (PID 12492)
+  Proxy self-test before the run: 17/17 checks passed, exit 0, empty stderr. Upstream check via proxy: GET /api/version -> 200 {"version":"0.40.12"} (exchange 0001; metadata only).
+
+== 3. DATABASE FINGERPRINTS AND IDENTITY GATE ==
+Original D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\maintenance-planner.db
+  sha256 2BA12C4799F146822638374D193FCFD1FF6D36C4B98484CC6E00634B8C2C89A2, length 352256, lastWrite 2026-10-28T22:37:18.9545523+05:30
+  Checked equal at: preflight (10:54), identity gate (10:55), after the run with the API running (11:12), after API shutdown (11:12). Never used by the API.
+Copy $S\maintenance-planner.ai03-verification.db: created 2026-10-29 by Copy-Item, sha256 equal to the original's before the run.
+Preflight: no -wal/-shm beside the original; exclusive read-only open of the original succeeded; ports 5083/7079/11435 free; Ollama listening on 11434.
+Gate (2026-10-29T10:55:55+05:30, before any planning request) - PASSED:
+  Check 1 PASS: 98 EF Core connection log lines, one distinct server value = the copy's absolute path; 0 lines mention the original. First line:
+    "Opened connection to database 'main' on server '$S\maintenance-planner.ai03-verification.db'." (full path in the log)
+  Check 2 PASS: exclusive read-only open of the original succeeded; the same open of the copy failed ("being used by another process").
+  Check 3 PASS: original sha256, length and last-write time unchanged.
+
+== 4. PLANNING REQUEST ==
+POST http://localhost:5083/api/planning-jobs at 2026-10-29T10:57:13.81+05:30
+  Idempotency-Key: 046db60c-fa0a-4da8-86c7-a8d7035195a2
+  Content-Type: application/json; charset=utf-8
+  Body: {"requestText":"Replace the P-101 bearing.","assetIds":["P-101"],"windowId":"MW-P101-BASELINE-20261024"}
+Response: 202, Location /api/planning-jobs/c72a938b-07b9-48e7-852f-d25ab944d570,
+  {"jobId":"c72a938b-07b9-48e7-852f-d25ab944d570","statusUrl":"/api/planning-jobs/c72a938b-07b9-48e7-852f-d25ab944d570"}
+No other endpoint was called except GET /api/planning-jobs/{id} (45 polls). The candidates endpoint was not called (outcome not CandidatesGenerated).
+
+== 5. ATTEMPTS AND RETRY (status polls, 07-poll.jsonl) ==
+10:57:14  Queued, attempt 0
+10:57:16  Running, attempt 1, startedAtUtc 05:27:15.16Z
+11:00:36  Running, attempt 2, startedAtUtc 05:30:17.92Z   <- attempt 1 failed with transient OLLAMA_TIMEOUT and was re-queued automatically (MaxAttempts 2)
+11:10:21  Failed, attempt 2, failureCode OLLAMA_TIMEOUT (completedAtUtc 05:39:34.22Z)   <- not retried: attempts exhausted
+Attempt 2 started again from interpretation (its first request is byte-identical to attempt 1's: same sha256 933b3bb2...), because no checkpoint existed.
+Polling was slower than the planned 2 s: each poll time is recorded after its response arrived, and GET responses took up to 217.5 s during inference
+(45 polls in 13 min). The cause was not determined; CPU saturation by CPU-only inference is a plausible, unverified explanation.
+
+== 6. OLLAMA EXCHANGES (via the logging proxy; correlation ID, timing, body hashes, model tool calls) ==
+MaxToolCalls was 6; format and tools were never sent together. "first byte" = time until Ollama's response headers (non-streaming).
+-- Attempt 1 --
+0002-ca435862  tool round   191917 ms  HTTP 200  outcome client_disconnected (the API timed out at 180 s; Ollama finished later)
+  request 7181 B sha256 933b3bb29e2d7cd48925b2a3f738f7aec270fcfdff547bd6011f016dc66d5a42 / response 455 B sha256 f2a4fbac657552023b9e6fcdec8f0f4af04f045ca8f2fce076879e854d340dba
+  model tool call: get_task_catalogue {"assetId": "P-101"}   (prompt_eval_count 1402, eval_count 27; this response never reached the application)
+-- Attempt 2 --
+0003-83f5e1d6  tool round   17767 ms   request 7181 B sha256 933b3bb2...6d5a42 (identical to 0002) / response 453 B sha256 a30852b5acc0ad2bbbd0748960793a6a0e128a38afdb7e4e4fa822afd6f49ed7
+  model tool call: get_task_catalogue {"assetId": "P-101"}
+0004-601b4998  tool round   59542 ms   request 8964 B sha256 1de6ab02d9762e6a02bb1db9078dcf5731499b9874bb9289a4e1896860a15682 / response 500 B sha256 517f28456179af271ed36984300ca5492761d63d5d3f08f200dcddc179b6eb5a
+  tool result sent: get_task_catalogue ok (1007 chars)
+  model tool call: get_technician_availability {"windowId": "2023-10-15T08:00:00Z/2023-10-15T18:00:00Z"}   <- invented window ID
+0005-b0ebe510  tool round   75142 ms   request 9400 B sha256 673352a8ce091e78c3400e5a9422c1814733fb860229c4d172ddb243eba0f108 / response 652 B sha256 8fbb14474ad48bd9d6dd3274f6b301191711c7c7b44add983ff4e2fcf138c3bb
+  tool result sent: get_technician_availability error UNKNOWN_WINDOW "Maintenance window 2023-10-15T08:00:00Z/2023-10-15T18:00:00Z does not exist."
+  model tool call: validate_schedule {"assetIds": ["P-101"], "windowId": "2023-10-15T08:00:00Z/2023-10-15T18:00:00Z",
+    "placements": [{"end": "2023-10-15T16:00:00Z", "start": "2023-10-15T10:00:00Z", "taskId": "P101-BEARING-REPLACEMENT", "technicianIds": ["T-101"]}]}   <- invented window and technician
+0006-ffe5ee14  tool round   34726 ms   request 9976 B sha256 166a056b0cc4a40dc136f3723ce3409db0ea7f077d4273ed9c41268994e6e463 / response 448 B sha256 67663bc1508e748a44734ec94a3ee91105a494f8cf5bf7fb812b8f416b4760d7
+  tool result sent: validate_schedule error UNKNOWN_WINDOW (same message)
+  model tool call: lookup_stock {"assetId": "P-101"}
+0007-a12ebd55  tool round   37244 ms   request 10497 B sha256 f85befb18041004f6e8f2425089d35065992a59da39a6c341bc5f3e6fb4c1acc / response 499 B sha256 02ee54c64ae9e9d1e2409846a4c4c8f55d2d1ae50ade02a6e379c765650fa8b1
+  tool result sent: lookup_stock ok (197 chars)
+  model tool call: get_technician_availability {"windowId": "2023-10-15T08:00:00Z/2023-10-15T18:00:00Z"}
+0008-4e8b2c8f  tool round   19329 ms   request 10933 B sha256 c319708b909cb6e4beba5cb2d01c1977bc93aeb2265c284f81d674626aafd1d7 / response 444 B sha256 bc5f4a070765129e6250bcf90b816872fdd3db80bf93779d27026b9c70d8be90
+  tool result sent: get_technician_availability error UNKNOWN_WINDOW (same message)
+  model tool call: get_technician_availability {}
+0009-c43dc0ed  tool round   129680 ms  request 12379 B sha256 53d31f98cc633cdd32b8eeb4bdb59f50147f53125e2390ed882c9bd9108f8821 / response 911 B sha256 8077070877ee6ba662807b28cb6fdb699df4e60edd5e87a8bbb673edddd66cf2
+  tool result sent: get_technician_availability ok (809 chars)
+  model replied WITHOUT tool calls (6 calls used = the limit, not exceeded), content:
+    {"maintenanceIntent": "Replace the P-101 bearing.", "scope": "Replace the P-101 bearing on the Cooling Water Pump P-101.", "proposedAssetIds": ["P-101"],
+     "proposedTaskIds": ["P101-BEARING-REPLACEMENT"], "scopeResolution": "Resolved", "missingInformation": [],
+     "assumptions": ["The maintenance window 2023-10-15T08:00:00Z/2023-10-15T18:00:00Z does not exist and must be scheduled for a different date."],
+     "scopeMappings": [{"taskId": "P101-BEARING-REPLACEMENT", "assetId": "P-101"}]}
+0010-14292187  FINAL JSON-mode request (format json, no tools)   261779 ms  HTTP 200  outcome client_disconnected (the API timed out at 180 s)
+  request 9189 B sha256 488f81d45e1a212616d5f86a9d2af691f5718918868b1a6091320ec3aa36103a / response 911 B sha256 5484d88e5cc216db4d72247663e9c4d6d3db596bdb35d653e1a5b11af128e7c9
+  Ollama's (late) content was the same JSON as 0009; it never reached the application, so no interpretation was parsed or used.
+API log (HttpClient): every request went to http://127.0.0.1:11435/api/chat; response-header times 18616, 59551, 75181, 34879, 37246, 19351, 129683 ms for 0003-0009.
+
+== 7. DATABASE SNAPSHOTS (copy, read-only, columns: pre-start / pre-request / post-request) ==
+PlanningJobs             24 / 24 / 25   (+1: the run's job; jobs by status after: Failed 3, Succeeded 22)
+Drafts                    1 /  1 /  1   (Approved 1, unchanged)
+Reservations              1 /  1 /  1
+LockedTaskAssignments     3 /  3 /  3
+EditedTaskPlacements      0 /  0 /  0
+DraftTaskProgress         0 /  0 /  0
+BusinessActionRecords     0 /  0 /  0
+SpareParts BR-101         OnHand 1.0 / Reserved 1.0 at all three points
+Queued/Running jobs: none before or after. Migrations: 18 applied before and after (startup applied none).
+Job row after the run: Status Failed, AttemptCount 2, FailureCode OLLAMA_TIMEOUT, ResultPayload null, CheckpointPayload null, WorkerLeaseToken null, OriginalJobId null.
+=> The planning job is the only business-data addition. No draft, reservation, lock, edit, progress or business-action record; stock unchanged; no approval occurred.
+The copy is in WAL journal mode: its main file is unchanged; the run's writes are in $S\maintenance-planner.ai03-verification.db-wal (300792 B, kept for review),
+read by the post-request snapshot.
+
+== 8. FINDINGS AND LIMITATIONS ==
+Confirmed:
+ F1 The installed Ollama and qwen2.5:7b produce well-formed tool_calls for this application's tool definitions; the application executed six real calls
+    (get_task_catalogue, get_technician_availability x3, validate_schedule, lookup_stock), returned actual data or coded errors, stayed within MaxToolCalls,
+    and sent the final request in JSON mode without tools.
+ F2 Unknown identifiers chosen by the model were rejected with UNKNOWN_WINDOW instead of producing data.
+ F3 The model invented a window ID ("2023-10-15T08:00:00Z/2023-10-15T18:00:00Z") and a technician ("T-101"). The interpreter's user prompt does not include
+    the request's windowId (it contains the request text, selected asset IDs, asset list and task catalogue), so the model had no way to know
+    MW-P101-BASELINE-20261024. This is an implementation gap in the prompt, not a model fault.
+ F4 Performance: on CPU-only inference, single requests took 17.8 s to 261.8 s; two exceeded the 180 s per-request timeout, so the job failed
+    (OLLAMA_TIMEOUT, transient -> one automatic retry -> exhausted). The tool loop multiplies the number of requests (8 in attempt 2), making timeouts likely.
+ F5 As predicted, the proxy cannot see the API give up while Ollama is generating: Ollama finished 0002 and 0010 after the API's timeout
+    (outcome client_disconnected), and 0002's generation overlapped the start of attempt 2.
+ F6 Business-data and approval boundaries held (section 7); the original database's main file was never touched by the API.
+ F7 Side effect caused by the verification itself, not by the application: after the run, a read-only Python sqlite3 open of the ORIGINAL (to read its
+    journal mode) created maintenance-planner.db-wal (0 B) and maintenance-planner.db-shm (32768 B) beside it at 11:13:00, because the database is in WAL mode.
+    The original's main file is unchanged (sha256/length/lastWrite as recorded). Both files are git-ignored. They were left in place pending the owner's decision.
+Not established:
+ - Whether a tool-enabled run completes successfully with a faster runtime (GPU) or a longer timeout; whether the final JSON would then pass validation
+   (the late 0009/0010 content has all required fields, but it was never parsed by the application).
+ - Whether CPU-only inference also caused the slow status responses.
+ - Interpretation quality beyond this single request.
+
+== 9. RUN FILES (in $S; sha256) ==
+0CD45604E544152FD44B8DA2AC38922236C5031A6405ED92AADD3612E4FA050D  run\proxy-log\index.jsonl (plus one .request.body/.response.body file per exchange, hashes in section 6)
+3314F9EC9581B8D3E28A4095EE23497B3EDA98C5F9D57FF9F8A8F122ABBC5ADD  run\06-post.json
+15E874698A1167954B09B8487388C4D42421E5E2B7E72ED4822B2006F84A8635  run\07-poll.jsonl
+015CDD1AB4CFC9DDB85DDD9617A67377278673288A928E96C1CB2C926DCF6636  run\08-final-status.json
+8F1476BD0E4371802C0C6CFCF93494A7E488AC03BF483A1E2ADC995E6FDB8A90  run\10-exchange-analysis.txt
+87BA6548BDA51FBE095954E3A5ED381BA8F32FD13B76653146A9E418CE1775B7  run\api.log
+1EF7289D86CDDC9F7081F09EE5815F4071DC3F442D4D4299332446DE0FAFED81  run\02-copy-inputs-and-pre-start-snapshot.json
+4D97E4676BF2DE5C10DD1110029C84C2F0527CF9B59BD85EDD1DEA7931DD98F4  run\05b-pre-request-snapshot.json
+0F71B07AF891161AC4AF2B134E75872AAA97EB5AC4B2447F6248DC184D02A29E  run\11-post-request-snapshot.json
+313CCC6392AADCB3EB697126CB1F6434CA9858F4B2FBC1D5C4FCFD67530D0618  run\13-job-row.json
+Also in $S\run: 01-preflight.txt, 03-proxy-selftest.out.txt, 04-api-process-config.txt, 05-identity-gate.txt, 12-after-run-and-cleanup.txt, proxy.out.txt.
+Scripts: ollama_logging_proxy.py 877658431C86E65F6549C571B0F7F974563E933ED6B93AFF21726AA5F4F05498, db_snapshot.py 5C8F69DBA9C712E8F46E4CA40592641E4296D56905C5AD223ACA0325AC8AC2A8,
+  post_and_poll.ps1 4E80EE54F3ECD81F5F165C1CC34070044B53C54FC4F54731407B532970F65FA7, analyze_exchanges.py DC2068900F08F3536ACB0CB876C1A578616869C7A244352E65CF100E12DD43BF,
+  job_row.py 877A5D3E2A9EE13F211537448FCD04A7DDBFEEEB491FD355CCA8F01C668C8C2E
+
+== 10. CLEANUP ==
+Stopped only the processes started for this test: API PID 5788, dotnet run PID 6544, proxy PID 12492 (Stop-Process; the job was already terminal, nothing was in flight).
+Ports 5083, 7079 and 11435 released. The copy was no longer held open afterwards.
+Tracked source/config: git diff unchanged from before the run; appsettings.json, appsettings.Development.json and launchSettings.json unmodified.
+Database copy, WAL file, raw logs and scripts retained in $S for review.

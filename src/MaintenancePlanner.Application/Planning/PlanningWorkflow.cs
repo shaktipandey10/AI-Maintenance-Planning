@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using MaintenancePlanner.Application.Planning.Tools;
 using MaintenancePlanner.Application.Queries;
 
 namespace MaintenancePlanner.Application.Planning;
@@ -8,7 +9,8 @@ public sealed class PlanningWorkflow(
     IManualEvidenceRetriever evidenceRetriever,
     IPlanningRequestInterpreter interpreter,
     DeterministicPlanningScheduler scheduler,
-    IPlanningInterpretationCheckpointSink? checkpointSink = null) : IPlanningWorkflow
+    IPlanningInterpretationCheckpointSink? checkpointSink = null,
+    ModelCandidateProposals? modelCandidates = null) : IPlanningWorkflow
 {
     public Task<PlanningWorkflowResult> ExecuteAsync(
         PlanningRequest request,
@@ -136,6 +138,12 @@ public sealed class PlanningWorkflow(
         }
 
         var authoritativeTasks = taskCatalogues.Values.SelectMany(catalogue => catalogue).ToArray();
+        // AI03: candidates the model saves during interpretation are bound to this request, not to model arguments
+        modelCandidates?.Begin(new ModelCandidateContext(
+            request.AssetIds,
+            window.Id,
+            request.CompletedTaskIds,
+            request.ReleasableReservedQuantities));
         var interpretation = resumedInterpretation ?? await interpreter.InterpretAsync(
             request,
             assets,
@@ -402,7 +410,7 @@ public sealed class PlanningWorkflow(
         }
 
         return AddScopeAndEvidenceToCandidates(
-            result,
+            IncludeModelCandidates(result, requiredTasks.Keys),
             evidenceResult.References,
             interpretation.ProposedTaskIds
                 .Where(taskId => !request.CompletedTaskIds.Contains(taskId, StringComparer.OrdinalIgnoreCase))
@@ -736,6 +744,53 @@ public sealed class PlanningWorkflow(
             requiredTasks[followUp.Id] = followUp;
             currentTask = followUp;
         }
+    }
+
+    /// <summary>
+    /// AI03 draft saving: adds the candidates the model saved (already validated against this request) to the
+    /// generated, unapproved candidates. A saved candidate is added only when it covers exactly the required task scope,
+    /// like every scheduler candidate, and is not a copy of one; every saved candidate gets a note saying what happened.
+    /// </summary>
+    private PlanningWorkflowResult IncludeModelCandidates(
+        PlanningWorkflowResult result,
+        IReadOnlyCollection<string> requiredTaskIds)
+    {
+        var proposals = modelCandidates?.Proposals ?? [];
+        if (proposals.Count == 0)
+            return result;
+
+        if (result is not PlanningCandidatesGeneratedResult generated)
+        {
+            return result with
+            {
+                ModelCandidateNotes = proposals
+                    .Select(proposal => $"Model-proposed candidate {proposal.Number} was not included: the planning outcome is {result.GetType().Name.Replace("Planning", string.Empty).Replace("Result", string.Empty)}.")
+                    .ToArray()
+            };
+        }
+
+        var candidates = generated.Candidates.ToList();
+        var notes = new List<string>();
+        foreach (var proposal in proposals)
+        {
+            var copyOf = candidates.FindIndex(candidate => ModelCandidateProposals.SamePlacements(candidate, proposal.Candidate));
+            if (!HasExactTaskScope(proposal.Candidate, requiredTaskIds))
+            {
+                notes.Add($"Model-proposed candidate {proposal.Number} was not included: it does not cover exactly the required tasks ({string.Join(", ", requiredTaskIds)}).");
+            }
+            else if (copyOf >= 0)
+            {
+                notes.Add($"Model-proposed candidate {proposal.Number} was not included: it is identical to candidate {copyOf + 1}.");
+            }
+            else
+            {
+                candidates.Add(proposal.Candidate);
+                notes.Add($"Model-proposed candidate {proposal.Number} was included as candidate {candidates.Count}.");
+            }
+        }
+
+        CandidateCostCalculator.ApplyRankingMetadata(candidates);
+        return generated with { Candidates = candidates, ModelCandidateNotes = notes };
     }
 
     private static PlanningWorkflowResult AddScopeAndEvidenceToCandidates(

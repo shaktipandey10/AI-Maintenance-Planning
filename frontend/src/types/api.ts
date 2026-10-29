@@ -252,3 +252,35 @@ export interface ReplanAcceptedResponse {
   newJobId: string;
   statusUrl: string;
 }
+
+// Structured datasets accepted by POST /api/imports/{dataset} as CSV or JSON (FR02).
+export type ImportDatasetSlug =
+  | 'assets'
+  | 'spare-parts'
+  | 'technicians'
+  | 'technician-availability'
+  | 'tasks'
+  | 'maintenance-history';
+
+// One problem found in an import. recordNumber is the CSV line (the header is line 1), the one-based JSON array
+// position or the PDF page; it is null for problems with the file as a whole.
+export interface ImportIssue {
+  recordNumber?: number | null;
+  location: string;
+  recordId?: string | null;
+  field?: string | null;
+  message: string;
+}
+
+// Result of POST /api/imports/{dataset} and POST /api/imports/manuals, returned with 200 (imported), 422 (rejected)
+// and 400 (malformed upload). Imports are all-or-nothing: when imported is false nothing was saved.
+export interface ImportReport {
+  dataset: string;
+  format: string;
+  fileName?: string | null;
+  imported: boolean;
+  totalRecords: number;
+  importedRecords: number;
+  invalidRecords: number;
+  issues: ImportIssue[];
+}

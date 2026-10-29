@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { AlternativesScreen } from './screens/AlternativesScreen'
 import { ApprovalScreen } from './screens/ApprovalScreen'
 import { DraftDetailScreen } from './screens/DraftDetailScreen'
+import { ImportScreen } from './screens/ImportScreen'
 import { ProgressScreen } from './screens/ProgressScreen'
 import { apiClient } from './services/apiClient'
 import type { CandidateResponse, InterpretationResponse, SavedPlanResponse } from './types/api'
@@ -22,7 +23,7 @@ interface JobStatus {
   errorMessage: string | null;
 }
 
-type AppScreen = 'dashboard' | 'alternatives' | 'approval' | 'draft-detail' | 'progress';
+type AppScreen = 'dashboard' | 'alternatives' | 'approval' | 'draft-detail' | 'progress' | 'imports';
 
 function App() {
   const [role, setRole] = useState('planner')
@@ -327,6 +328,10 @@ function App() {
         }}
       />
     )
+  }
+
+  if (currentScreen === 'imports') {
+    return <ImportScreen onBack={() => setCurrentScreen('dashboard')} />
   }
 
   return (
@@ -634,6 +639,19 @@ function App() {
             </ul>
           )}
           <button onClick={loadSavedPlans} className="btn btn-link">↻ Refresh</button>
+        </div>
+
+        {/* Tile: Import data (FR02) */}
+        <div className="tile">
+          <div className="tile-header">
+            <h2>Import Data</h2>
+            <span className="tile-icon">📥</span>
+          </div>
+
+          <p>Import assets, spare parts, technicians, availability, tasks and maintenance history (CSV or JSON), or a text-based PDF manual.</p>
+          <button onClick={() => setCurrentScreen('imports')} className="btn btn-primary btn-block">
+            → Open importer
+          </button>
         </div>
 
         {/* Tile 3: Recently Created Job */}

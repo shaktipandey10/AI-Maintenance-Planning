@@ -69,4 +69,16 @@ describe('App saved plans and actor role', () => {
 
     await waitFor(() => expect(api.setActorRole).toHaveBeenLastCalledWith('reviewer'));
   });
+
+  it('opens the importer from the dashboard and returns to the dashboard', async () => {
+    api.getSavedPlans.mockResolvedValue([]);
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /Open importer/ }));
+    expect(await screen.findByRole('heading', { name: 'Import Data', level: 1 })).toBeInTheDocument();
+    expect(screen.getByLabelText(/Dataset/)).toHaveValue('assets');
+
+    fireEvent.click(screen.getByRole('button', { name: /Back to dashboard/ }));
+    expect(await screen.findByRole('heading', { name: 'Saved Plans' })).toBeInTheDocument();
+  });
 });

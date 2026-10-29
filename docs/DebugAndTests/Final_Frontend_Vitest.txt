@@ -1,0 +1,144 @@
+﻿# Stage 7 focused verification: frontend unit tests (Vitest, jsdom; no API and no database)
+# Captured: 2026-10-29T14:58:48.1270771+05:30 to 2026-10-29T15:00:18.0707522+05:30
+# Repository HEAD: 1376af5 (working tree has uncommitted frontend changes: App.tsx, apiClient.ts, api.ts and tests, plus the untracked ImportScreen files)
+# Safeguards: no API started; the frontend tests mock the API client; no database access.
+
+# Command
+cd frontend; npx vitest run --reporter=verbose
+# Exit code
+0
+# Captured output
+(!) Your Vite config uses features that are unsupported by `configLoader: 'native'`, which is planned to become the default in a future major version of Vite:
+  - `__dirname` (vitest.config.ts:15:25). Use `import.meta.dirname` instead
+Set `VITE_CONFIG_NATIVE_IGNORE_WARNING=true` to suppress this warning.
+
+ RUN  v5.0.5 D:/repos/repos/ABB_AI_POC/AI-Maintanance-Planner/frontend
+
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Loading and error states > should display loading message while fetching 106ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Loading and error states > should display error message on fetch failure 33ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Loading and error states > should call onBack when back button is clicked in error state 30ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Empty and non-candidate outcomes > should display message for empty candidates 24ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Empty and non-candidate outcomes > should display outcome message for non-CandidatesGenerated 25ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Candidate display > should render all candidates 195ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Candidate display > should display candidate rationale 51ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Candidate display > should show lowest cost badge 50ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Currency handling > should display known currency 58ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Currency handling > should display "Currency unknown" for UNKNOWN currency 75ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Currency handling > should display cost warning when present 50ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Schedule table > should display task placements 48ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Schedule table > should display technician assignments 29ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Schedule table > should handle empty technician list 25ms
+ ✓ src/screens/ImportScreen.test.tsx > ImportScreen (FR02) > requires a file with a supported extension and size before asking for confirmation 697ms
+ ✓ src/screens/ImportScreen.test.tsx > ImportScreen (FR02) > asks for confirmation, which is not a preview, before uploading; cancelling uploads nothing 196ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > shows each task lock and lets the user lock a task to one of its technicians or unlock it 1082ms
+ ✓ src/screens/ImportScreen.test.tsx > ImportScreen (FR02) > shows the manual fields only for PDF manuals and requires them 243ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > shows every task as unlocked and changeable when the locks load as an empty list 138ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Candidate selection > should select first candidate by default 48ms
+ ✓ src/screens/ImportScreen.test.tsx > ImportScreen (FR02) > lists every issue of a rejected import, says nothing was saved, and imports a corrected file 296ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Candidate selection > should proceed to approval with Alternative 1 and index 0 when nothing else is selected 581ms
+ ✓ src/screens/ImportScreen.test.tsx > ImportScreen (FR02) > shows a failed request and allows another attempt 124ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > shows the lock state as unknown and not changeable while the locks are loading 208ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Candidate selection > should proceed to approval with Alternative 2 and index 1 after selecting it 148ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Candidate selection > should switch details on candidate click 93ms
+ ✓ src/screens/ImportScreen.test.tsx > ImportScreen (FR02) > shows a loading state and sends one request however often confirm is clicked 119ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Candidate selection > should expose candidate cards as focusable buttons with pressed state 65ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > reports a failed lock load beside the lock controls, disables them instead of showing "Unlocked", and recovers on retry 315ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Candidate selection > should select a candidate with the Enter key 76ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Candidate selection > should select a candidate with the Space key 74ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Candidate selection > should not select a candidate for other keys or keys pressed on its nested View Draft button 42ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Evidence and interpretation > should display interpretation when available 35ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Evidence and interpretation > should display evidence references 34ms
+ ✓ src/screens/ImportScreen.test.tsx > ImportScreen (FR02) > moves focus into the labelled confirmation, describes it on Confirm, and cancels with Escape 195ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Deferral reasons > should display deferral reasons when present 33ms
+ ✓ src/screens/AlternativesScreen.test.tsx > AlternativesScreen > Completion time > should display completion time in minutes 48ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > reports a lock the API rejects instead of applying it 260ms
+ ✓ src/screens/ImportScreen.test.tsx > ImportScreen (FR02) > clears the file, confirmation, report and error when the dataset changes 214ms
+ ✓ src/screens/ImportScreen.test.tsx > ImportScreen (FR02) > rejects a manual that is not a PDF or exceeds 20 MB 126ms
+ ✓ src/screens/ImportScreen.test.tsx > ImportScreen (FR02) > closes the confirmation without uploading when a manual field is edited 137ms
+ ✓ src/screens/ImportScreen.test.tsx > ImportScreen (FR02) > returns to the dashboard 30ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > creates a revision from the edits and opens it for review and approval 453ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > lists every violation when the edited plan is rejected, and offers no revision 287ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > shows who performed each recorded action and reloads the history after an action 238ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > shows the draft status, task placements with their progress status, and reservations 70ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > offers only the next forward transition and refreshes progress after it succeeds 267ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > shows the API error when a task transition is rejected, without a success message 265ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > asks for confirmation before cancelling and does nothing when declined 131ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > cancels after confirmation, shows the result and the refreshed status and reservations 241ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > shows a cancellation conflict as an error and keeps the draft unchanged 274ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > disables actions while a request is in flight, so a double click submits once 366ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > hides every mutating action for a superseded draft 114ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > submits a task edit for the selected task and shows the refreshed edits 597ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > shows edit validation violations, and deletes an edit 473ms
+stdout | src/screens/ApprovalScreen.test.tsx > ApprovalScreen > First-time approval flow > should approve draft and store draft ID in localStorage
+[Approval] Approval succeeded, draftId: draft-456
+
+ ✓ src/screens/ApprovalScreen.test.tsx > ApprovalScreen > First-time approval flow > should render approval button when no draft exists 495ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > creates a replacement plan, then shows its planning failures 582ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > opens the replacement job candidates for approval once they are generated 564ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > shows a replan conflict from the API as an error 239ms
+stdout | src/screens/ApprovalScreen.test.tsx > ApprovalScreen > First-time approval flow > should send the selected second candidate index when approving
+[Approval] Approval succeeded, draftId: draft-789
+
+ ✓ src/screens/ApprovalScreen.test.tsx > ApprovalScreen > First-time approval flow > should approve draft and store draft ID in localStorage 618ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > downloads the server JSON export and reports an export failure 325ms
+ ✓ src/screens/DraftDetailScreen.test.tsx > DraftDetailScreen draft management > opens a revision's candidates from the revision history 137ms
+ ✓ src/screens/ApprovalScreen.test.tsx > ApprovalScreen > First-time approval flow > should send the selected second candidate index when approving 585ms
+ ✓ src/screens/ApprovalScreen.test.tsx > ApprovalScreen > Already approved state > should show already-approved message when draft ID exists in localStorage 72ms
+ ✓ src/screens/ApprovalScreen.test.tsx > ApprovalScreen > Already approved state > should disable approve button when draft already exists 110ms
+ ✓ src/screens/ApprovalScreen.test.tsx > ApprovalScreen > Already approved state > should show View Draft Detail button when draft exists 62ms
+ ✓ src/screens/ApprovalScreen.test.tsx > ApprovalScreen > Already approved state > should show export buttons when draft exists 54ms
+ ✓ src/screens/ApprovalScreen.test.tsx > ApprovalScreen > Already approved state > should not make approval request when draft already exists 21ms
+ ✓ src/services/apiClient.test.ts > apiClient.approveDraft > posts candidateIndex 0 in the JSON body of the approve request 11ms
+ ✓ src/services/apiClient.test.ts > apiClient.approveDraft > posts candidateIndex 1 in the JSON body of the approve request 2ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > posts the dataset file as multipart form data without setting a Content-Type 5ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > posts a manual with its file, document ID and version 2ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > returns the import report sent with status 200 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > returns the import report sent with status 400 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > returns the import report sent with status 422 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > throws the problem details of a server error 4ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > throws when a 400 response is not an import report 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > shows a concise fallback, not a stack trace, for a non-JSON server error 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > shows a concise fallback, not an HTML page, for a non-JSON server error 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > shows a concise fallback, not an overlong body, for a non-JSON server error 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > keeps a short plain-text error message 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > reports a 200 response without an import report as a safe error 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > reports a 200 response without an import report as a safe error 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > reports a 422 response without an import report as a safe error 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > reports a 422 response without an import report as a safe error 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > does not show an HTML error page from other endpoints either 1ms
+ ✓ src/services/apiClient.test.ts > apiClient imports (FR02) > reports a network failure as an unreachable API 2ms
+ ✓ src/screens/ImportScreen.integration.test.tsx > ImportScreen with the API client (FR02) > renders the issues of a 422 import report sent by the API 611ms
+ ✓ src/screens/ImportScreen.integration.test.tsx > ImportScreen with the API client (FR02) > shows a concise error instead of a server stack trace 111ms
+ ✓ src/App.test.tsx > App saved plans and actor role > lists saved plans on the dashboard and opens one without typing its draft ID 696ms
+ ✓ src/App.test.tsx > App saved plans and actor role > shows when there are no saved plans and reports a failed load 160ms
+ ✓ src/App.test.tsx > App saved plans and actor role > passes the selected role to the API client as the actor of recorded actions 77ms
+ ✓ src/App.test.tsx > App saved plans and actor role > opens the importer from the dashboard and returns to the dashboard 214ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > locks a task with PUT { technicianId } and unlocks it with DELETE 9ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > rejects an impossible lock with the API conflict code and reason 4ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > creates a revision from edits with an Idempotency-Key, and keeps every violation of a rejected one 2ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > lists saved plans with GET /api/drafts 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > reads the action history of a plan with GET /api/planning-jobs/{jobId}/history 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > sends the selected role as X-Actor-Role with recorded actions, keeping their other headers 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > cancels a draft with POST /cancel and resolves on 204 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > rejects a cancellation conflict with the API reason and message 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > submits task edits as { edits } and returns the persisted edits 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > reports a task-edit conflict (409 without body) as a non-approved draft 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > validates task edits with POST /task-edits/validate 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > deletes one task edit and all task edits with DELETE 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > reports a missing task edit on delete 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > gets the revision chain of a planning job 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > replans with an Idempotency-Key header and the revised request body 1ms
+ ✓ src/services/apiClient.draftManagement.test.ts > apiClient draft management > rejects a replan conflict with the API message 1ms
+ ✓ src/screens/PlanningRequestScreen.test.tsx > PlanningRequestScreen - Clarification UI > should export PlanningRequestScreen component 3ms
+ ✓ src/screens/PlanningRequestScreen.test.tsx > PlanningRequestScreen - Clarification UI > should have clarification parsing logic 2ms
+ ✓ src/screens/PlanningRequestScreen.test.tsx > PlanningRequestScreen - Clarification UI > should handle non-clarification payload 1ms
+
+ Test Files  9 passed (9)
+      Tests  112 passed (112)
+   Start at  14:59:12
+   Duration  65.56s (environment 72%, setup 14%, tests 9%, transform 3%, import 3%)
+
+Environment  jsdom was created 9 times · 131.79s total, 72% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
