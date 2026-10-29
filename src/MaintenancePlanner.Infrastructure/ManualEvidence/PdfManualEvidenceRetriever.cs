@@ -83,29 +83,9 @@ public sealed class PdfManualEvidenceRetriever(
             var loadedSections = await Task.Run(() =>
             {
                 using var document = PdfDocument.Open(filePath);
-                var pages = new List<PdfEvidenceSection>();
-                foreach (var page in document.GetPages())
-                {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var pageText = ContentOrderTextExtractor.GetText(page);
-                    if (string.IsNullOrWhiteSpace(pageText))
-                        continue;
-
-                    var sectionMatches = SectionPattern.Matches(pageText);
-                    if (sectionMatches.Count == 0)
-                    {
-                        pages.Add(new PdfEvidenceSection(page.Number, null, pageText));
-                        continue;
-                    }
-
-                    foreach (Match match in sectionMatches)
-                    {
-                        pages.Add(new PdfEvidenceSection(
-                            page.Number,
-                            match.Groups["heading"].Value,
-                            match.Value));
-                    }
-                }
+                var pages = ReadPages(document, cancellationToken)
+                    .SelectMany(page => ToSections(page.PageNumber, page.Text))
+                    .ToList();
 
                 if (pages.Count == 0)
                 {
@@ -141,5 +121,38 @@ public sealed class PdfManualEvidenceRetriever(
         }
     }
 
-    private sealed record PdfEvidenceSection(int PageNumber, string? Heading, string Text);
+    /// <summary>The content-order text of every page, one-based; a page without extractable text has empty text.</summary>
+    internal static IReadOnlyList<PdfPageText> ReadPages(PdfDocument document, CancellationToken cancellationToken)
+    {
+        var pages = new List<PdfPageText>();
+        foreach (var page in document.GetPages())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            pages.Add(new PdfPageText(page.Number, ContentOrderTextExtractor.GetText(page) ?? string.Empty));
+        }
+
+        return pages;
+    }
+
+    /// <summary>
+    /// The citable sections of one page: each "Section:" heading with its text, or the whole page when it has no
+    /// heading. A page without extractable text has none.
+    /// </summary>
+    internal static IReadOnlyList<PdfEvidenceSection> ToSections(int pageNumber, string pageText)
+    {
+        if (string.IsNullOrWhiteSpace(pageText))
+            return [];
+
+        var sectionMatches = SectionPattern.Matches(pageText);
+        if (sectionMatches.Count == 0)
+            return [new PdfEvidenceSection(pageNumber, null, pageText)];
+
+        return sectionMatches
+            .Select(match => new PdfEvidenceSection(pageNumber, match.Groups["heading"].Value, match.Value))
+            .ToArray();
+    }
+
+    internal sealed record PdfPageText(int PageNumber, string Text);
+
+    internal sealed record PdfEvidenceSection(int PageNumber, string? Heading, string Text);
 }

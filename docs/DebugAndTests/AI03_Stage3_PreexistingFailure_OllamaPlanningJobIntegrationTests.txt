@@ -1,0 +1,49 @@
+﻿# AI03 Stage 3 evidence - captured test run (MOCKED MODEL: every Ollama reply is scripted by a fake HTTP handler; this is not real-model validation)
+# Note: Existing regression class, unchanged by AI03. It fails in its own fixture (FindRepositoryRoot looks for requirementsforpoc.md at the repository root; the file has been under docs/ since commit 8d0568f).
+# Captured: 2026-10-29T10:29:45.1771871+05:30
+# Repository HEAD: 1376af5 (working tree contains uncommitted AI03 changes)
+# Command: dotnet test tests/MaintenancePlanner.IntegrationTests/MaintenancePlanner.IntegrationTests.csproj --no-build --filter "FullyQualifiedName~OllamaPlanningJobIntegrationTests" --logger "console;verbosity=detailed"
+
+Test run for D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\bin\Debug\net10.0\MaintenancePlanner.IntegrationTests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\bin\Debug\net10.0\MaintenancePlanner.IntegrationTests.dll
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.8)
+[xUnit.net 00:00:00.36]   Discovering: MaintenancePlanner.IntegrationTests
+[xUnit.net 00:00:00.53]   Discovered:  MaintenancePlanner.IntegrationTests
+[xUnit.net 00:00:00.58]   Starting:    MaintenancePlanner.IntegrationTests
+[xUnit.net 00:00:04.60]     MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.ApiSubmission_RunsOllamaWorkflowAndPersistsCandidatesGenerated [FAIL]
+[xUnit.net 00:00:04.60]       System.IO.DirectoryNotFoundException : Could not locate requirementsforpoc.md from the integration test output directory.
+[xUnit.net 00:00:04.61]       Stack Trace:
+[xUnit.net 00:00:04.61]         D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs(251,0): at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.IntegrationFixture.FindRepositoryRoot()
+[xUnit.net 00:00:04.61]         D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs(170,0): at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.IntegrationFixture.CreateAsync(HttpMessageHandler ollamaHandler)
+[xUnit.net 00:00:04.61]         D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs(37,0): at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.ApiSubmission_RunsOllamaWorkflowAndPersistsCandidatesGenerated()
+[xUnit.net 00:00:04.61]         --- End of stack trace from previous location ---
+  Failed MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.ApiSubmission_RunsOllamaWorkflowAndPersistsCandidatesGenerated [3 s]
+  Error Message:
+   System.IO.DirectoryNotFoundException : Could not locate requirementsforpoc.md from the integration test output directory.
+  Stack Trace:
+     at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.IntegrationFixture.FindRepositoryRoot() in D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs:line 251
+   at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.IntegrationFixture.CreateAsync(HttpMessageHandler ollamaHandler) in D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs:line 170
+   at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.ApiSubmission_RunsOllamaWorkflowAndPersistsCandidatesGenerated() in D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs:line 37
+--- End of stack trace from previous location ---
+[xUnit.net 00:00:04.95]     MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.ApiSubmission_RunsOllamaWorkflowAndPersistsClarificationOutcomeForAmbiguousScope [FAIL]
+[xUnit.net 00:00:04.95]       System.IO.DirectoryNotFoundException : Could not locate requirementsforpoc.md from the integration test output directory.
+[xUnit.net 00:00:04.95]       Stack Trace:
+[xUnit.net 00:00:04.95]         D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs(251,0): at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.IntegrationFixture.FindRepositoryRoot()
+[xUnit.net 00:00:04.95]         D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs(170,0): at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.IntegrationFixture.CreateAsync(HttpMessageHandler ollamaHandler)
+[xUnit.net 00:00:04.95]         D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs(71,0): at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.ApiSubmission_RunsOllamaWorkflowAndPersistsClarificationOutcomeForAmbiguousScope()
+[xUnit.net 00:00:04.95]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:04.96]   Finished:    MaintenancePlanner.IntegrationTests
+  Failed MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.ApiSubmission_RunsOllamaWorkflowAndPersistsClarificationOutcomeForAmbiguousScope [345 ms]
+  Error Message:
+   System.IO.DirectoryNotFoundException : Could not locate requirementsforpoc.md from the integration test output directory.
+  Stack Trace:
+     at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.IntegrationFixture.FindRepositoryRoot() in D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs:line 251
+   at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.IntegrationFixture.CreateAsync(HttpMessageHandler ollamaHandler) in D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs:line 170
+   at MaintenancePlanner.IntegrationTests.OllamaPlanningJobIntegrationTests.ApiSubmission_RunsOllamaWorkflowAndPersistsClarificationOutcomeForAmbiguousScope() in D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.IntegrationTests\OllamaPlanningJobIntegrationTests.cs:line 71
+--- End of stack trace from previous location ---
+
+Test Run Failed.
+Total tests: 2
+     Failed: 2
+ Total time: 5.9892 Seconds

@@ -61,14 +61,51 @@ public static class PlanProgressEndpoints
                             t.SparePartId,
                             t.RequiredQuantity,
                             t.CompletedQuantity,
-                            t.RemainingQuantity)).ToArray());
+                            t.RemainingQuantity)).ToArray())
+                    {
+                        TaskStatuses = progress.TaskStatuses
+                            .Select(t => new TaskStatusResponse(t.TaskId, t.Status.ToString(), t.UpdatedAtUtc))
+                            .ToArray()
+                    };
                     return TypedResults.Ok(response);
                 })
             .WithName("GetPlanProgress")
             .WithSummary("Get plan progress and remaining work")
-            .WithDescription("Returns total required, completed, and remaining quantities for all spare parts in the plan.")
+            .WithDescription("Returns total required, completed, and remaining quantities for all spare parts in the plan, and the status of every planned task.")
             .Produces<PlanProgressResponse>()
             .Produces(StatusCodes.Status404NotFound);
+
+        app.MapPost("/api/drafts/{draftId:guid}/tasks/{taskId}/progress",
+                async Task<Results<
+                    Ok<TaskStatusUpdateResponse>,
+                    BadRequest<string>,
+                    NotFound<TaskStatusUpdateResponse>,
+                    Conflict<TaskStatusUpdateResponse>>> (
+                    Guid draftId,
+                    string taskId,
+                    TaskStatusUpdateRequest request,
+                    IPlanProgressService progressService,
+                    CancellationToken cancellationToken) =>
+                {
+                    if (!TryParseTaskStatus(request.Status, out var status))
+                        return TypedResults.BadRequest("status must be one of NotStarted, InProgress or Completed");
+
+                    var result = await progressService.UpdateTaskStatusAsync(draftId, taskId, status, cancellationToken);
+                    if (result.Succeeded)
+                        return TypedResults.Ok(new TaskStatusUpdateResponse(true, taskId, status.ToString()));
+
+                    var rejection = new TaskStatusUpdateResponse(false, taskId, null, result.FailureCode, result.FailureReason);
+                    return result.FailureCode is TaskStatusUpdateResult.DraftNotFound or TaskStatusUpdateResult.TaskNotInPlan
+                        ? TypedResults.NotFound(rejection)
+                        : TypedResults.Conflict(rejection);
+                })
+            .WithName("UpdateTaskProgress")
+            .WithSummary("Move one planned task to its next progress status")
+            .WithDescription("Body {\"status\": \"InProgress\" | \"Completed\"}. Tasks move forward only, NotStarted → InProgress → Completed; skipped, backward and repeated transitions return 409 INVALID_TASK_TRANSITION. Only tasks placed in an approved draft can be updated (404 TASK_NOT_IN_PLAN, 409 DRAFT_NOT_APPROVED).")
+            .Produces<TaskStatusUpdateResponse>(StatusCodes.Status200OK)
+            .Produces<string>(StatusCodes.Status400BadRequest)
+            .Produces<TaskStatusUpdateResponse>(StatusCodes.Status404NotFound)
+            .Produces<TaskStatusUpdateResponse>(StatusCodes.Status409Conflict);
 
         app.MapGet("/api/drafts/{draftId:guid}/export/json",
                 async Task<Results<FileContentHttpResult, NotFound, Conflict<string>>> (
@@ -134,5 +171,15 @@ public static class PlanProgressEndpoints
             .Produces<string>(StatusCodes.Status409Conflict);
 
         return app;
+    }
+
+    // Accepts the status names only (case-insensitive), not their numeric values.
+    private static bool TryParseTaskStatus(string? value, out TaskProgressStatus status)
+    {
+        status = default;
+        return !string.IsNullOrWhiteSpace(value) &&
+               !value.Trim().All(char.IsDigit) &&
+               Enum.TryParse(value.Trim(), ignoreCase: true, out status) &&
+               Enum.IsDefined(status);
     }
 }

@@ -58,7 +58,28 @@ public sealed record PlanProgressResponse(
     decimal TotalRequired,
     decimal CompletedQuantity,
     decimal RemainingQuantity,
-    IReadOnlyList<TaskProgressResponse> Tasks);
+    IReadOnlyList<TaskProgressResponse> Tasks)
+{
+    /// <summary>The status of every task placed in the approved plan, in plan order.</summary>
+    public IReadOnlyList<TaskStatusResponse> TaskStatuses { get; init; } = [];
+}
+
+/// <summary>Status of one planned task: NotStarted, InProgress or Completed.</summary>
+public sealed record TaskStatusResponse(
+    string TaskId,
+    string Status,
+    DateTimeOffset? UpdatedAtUtc);
+
+/// <summary>Body of POST /api/drafts/{draftId}/tasks/{taskId}/progress: the task's next status.</summary>
+public sealed record TaskStatusUpdateRequest(string? Status);
+
+/// <summary>Result of a task status update; FailureCode is set when it was rejected.</summary>
+public sealed record TaskStatusUpdateResponse(
+    bool Succeeded,
+    string TaskId,
+    string? Status,
+    string? FailureCode = null,
+    string? FailureReason = null);
 
 /// <summary>Result of marking a task complete.</summary>
 public sealed record TaskCompletionResponse(

@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+using MaintenancePlanner.Application.Planning.Tools;
 using MaintenancePlanner.Application.Queries;
 
 namespace MaintenancePlanner.Application.Planning;
@@ -6,12 +8,40 @@ public sealed class PlanningWorkflow(
     IMaintenancePlannerQueries queries,
     IManualEvidenceRetriever evidenceRetriever,
     IPlanningRequestInterpreter interpreter,
-    DeterministicPlanningScheduler scheduler) : IPlanningWorkflow
+    DeterministicPlanningScheduler scheduler,
+    IPlanningInterpretationCheckpointSink? checkpointSink = null,
+    ModelCandidateProposals? modelCandidates = null) : IPlanningWorkflow
 {
-    public async Task<PlanningWorkflowResult> ExecuteAsync(
+    public Task<PlanningWorkflowResult> ExecuteAsync(
         PlanningRequest request,
         CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? lockedTaskAssignments = null) =>
+        ExecuteCoreAsync(request, resumedInterpretation: null, cancellationToken, lockedTaskAssignments);
+
+    /// <summary>
+    /// Continues a planning job from an interpretation that was validated and checkpointed earlier. Only the
+    /// interpreter call is skipped: the request, the interpretation and its task scope are checked exactly as on the
+    /// normal path, against current data, before evidence retrieval and scheduling run.
+    /// </summary>
+    public async Task<PlanningWorkflowResult> ResumeFromCheckpointAsync(
+        PlanningRequest request,
+        PlanningInterpretation checkpoint,
+        CancellationToken cancellationToken,
         IReadOnlyDictionary<string, string>? lockedTaskAssignments = null)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (request is null || checkpoint is null)
+            return Invalid(checkpoint ?? UnresolvedInterpretation(request, []), "INVALID_CHECKPOINT", "Checkpoint resumption requires valid request and interpretation.", null);
+
+        return await ExecuteCoreAsync(request, checkpoint, cancellationToken, lockedTaskAssignments);
+    }
+
+    private async Task<PlanningWorkflowResult> ExecuteCoreAsync(
+        PlanningRequest request,
+        PlanningInterpretation? resumedInterpretation,
+        CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string>? lockedTaskAssignments)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -108,7 +138,13 @@ public sealed class PlanningWorkflow(
         }
 
         var authoritativeTasks = taskCatalogues.Values.SelectMany(catalogue => catalogue).ToArray();
-        var interpretation = await interpreter.InterpretAsync(
+        // AI03: candidates the model saves during interpretation are bound to this request, not to model arguments
+        modelCandidates?.Begin(new ModelCandidateContext(
+            request.AssetIds,
+            window.Id,
+            request.CompletedTaskIds,
+            request.ReleasableReservedQuantities));
+        var interpretation = resumedInterpretation ?? await interpreter.InterpretAsync(
             request,
             assets,
             authoritativeTasks,
@@ -287,10 +323,49 @@ public sealed class PlanningWorkflow(
             }
         }
 
+        // The interpretation has now passed every interpretation-stage check. A new interpretation is checkpointed
+        // here so an interrupted job can resume without interpreting the request again; a resumed one already is.
+        if (resumedInterpretation is null && checkpointSink is not null)
+            await checkpointSink.SaveValidatedInterpretationAsync(interpretation, cancellationToken);
+
+        // FR08: work in progress on the approved plan being replaced stays in the replacement (at its approved
+        // placement), even when the revised request does not name it
+        foreach (var inProgress in request.InProgressPlacements)
+        {
+            if (!tasksById.TryGetValue(inProgress.TaskId, out var matches) ||
+                matches.Length != 1 ||
+                !request.AssetIds.Contains(matches[0].AssetId, StringComparer.OrdinalIgnoreCase))
+            {
+                return Invalid(
+                    interpretation,
+                    "IN_PROGRESS_TASK_OUT_OF_SCOPE",
+                    $"Task {inProgress.TaskId} is in progress on the approved plan being replaced but is not in the selected assets' task catalogues.",
+                    inProgress.TaskId,
+                    inProgress.TaskId);
+            }
+
+            if (!IncludePredecessors(matches[0], tasksById, request.AssetIds, requiredTasks, out var predecessorViolation))
+                return Invalid(interpretation, predecessorViolation!);
+        }
+
+        // FR08: work completed on the approved plan being replaced is not scheduled again
+        foreach (var completedTaskId in request.CompletedTaskIds)
+            requiredTasks.Remove(completedTaskId);
+
+        if (requiredTasks.Count == 0)
+        {
+            return Invalid(
+                interpretation,
+                "NO_REMAINING_WORK",
+                "Every requested task is already completed on the approved plan being replaced.",
+                resourceId: null);
+        }
+
         var evidenceResult = await RetrieveEvidenceAsync(
             request,
             interpretation,
             request.AssetIds.Select(assetId => assetsById[assetId]),
+            assetsById.Keys,
             window,
             requiredTasks.Values,
             cancellationToken);
@@ -309,7 +384,12 @@ public sealed class PlanningWorkflow(
             new PlanningScheduleRequest(
                 request.AssetIds,
                 window.Id,
-                requiredTasks.Keys.ToArray()),
+                requiredTasks.Keys.ToArray())
+            {
+                CompletedTaskIds = request.CompletedTaskIds,
+                ReleasableReservedQuantities = request.ReleasableReservedQuantities,
+                InProgressPlacements = request.InProgressPlacements
+            },
             cancellationToken,
             lockedTaskAssignments);
         var result = PlanningWorkflowResultMapper.FromScheduleResult(
@@ -330,77 +410,18 @@ public sealed class PlanningWorkflow(
         }
 
         return AddScopeAndEvidenceToCandidates(
-            result,
+            IncludeModelCandidates(result, requiredTasks.Keys),
             evidenceResult.References,
-            interpretation.ProposedTaskIds);
-    }
-
-    public async Task<PlanningWorkflowResult> ResumeFromCheckpointAsync(
-        PlanningRequest request,
-        PlanningInterpretation checkpoint,
-        CancellationToken cancellationToken,
-        IReadOnlyDictionary<string, string>? lockedTaskAssignments = null)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-
-        if (request is null || checkpoint is null)
-            return Invalid(checkpoint ?? UnresolvedInterpretation(request, []), "INVALID_CHECKPOINT", "Checkpoint resumption requires valid request and interpretation.", null);
-
-        var assets = await queries.GetAssetsAsync(cancellationToken);
-        var window = (await queries.GetMaintenanceWindowsAsync(cancellationToken))
-            .FirstOrDefault(candidate => string.Equals(candidate.Id, request.MaintenanceWindowId, StringComparison.OrdinalIgnoreCase));
-
-        if (window is null)
-            return Invalid(checkpoint, "WINDOW_NOT_FOUND", $"Maintenance window {request.MaintenanceWindowId} does not exist.", request.MaintenanceWindowId);
-
-        var taskCatalogues = new Dictionary<string, IReadOnlyList<MaintenanceTaskReadModel>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var asset in assets.OrderBy(asset => asset.Id, StringComparer.OrdinalIgnoreCase))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var catalogue = await queries.GetTaskCatalogueAsync(asset.Id, cancellationToken);
-            if (catalogue is not null)
-                taskCatalogues.Add(asset.Id, catalogue);
-        }
-
-        var tasksById = taskCatalogues.Values
-            .SelectMany(catalogue => catalogue)
-            .GroupBy(task => task.Id, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(group => group.Key, group => group.ToArray(), StringComparer.OrdinalIgnoreCase);
-
-        var requiredTasks = new Dictionary<string, MaintenanceTaskReadModel>(StringComparer.OrdinalIgnoreCase);
-        foreach (var taskId in checkpoint.ProposedTaskIds)
-        {
-            if (!tasksById.TryGetValue(taskId, out var matches) || matches.Length != 1)
-                return Invalid(checkpoint, "TASK_NOT_FOUND", $"Task {taskId} not found or is ambiguous.", taskId);
-
-            if (!IncludePredecessors(matches[0], tasksById, request.AssetIds, requiredTasks, out var violation))
-                return Invalid(checkpoint, violation!);
-
-            requiredTasks[taskId] = matches[0];
-        }
-
-        var evidenceResult = await RetrieveEvidenceAsync(request, checkpoint, assets.Where(a => request.AssetIds.Contains(a.Id, StringComparer.OrdinalIgnoreCase)), window, requiredTasks.Values, cancellationToken);
-
-        if (evidenceResult.Violations.Count > 0)
-            return new PlanningDataUnavailableResult(evidenceResult.Violations, checkpoint.Assumptions, evidenceResult.References) { Interpretation = checkpoint };
-
-        var schedule = await scheduler.ScheduleAsync(
-            new PlanningScheduleRequest(request.AssetIds, window.Id, requiredTasks.Keys.ToArray()),
-            cancellationToken,
-            lockedTaskAssignments);
-
-        var result = PlanningWorkflowResultMapper.FromScheduleResult(schedule, checkpoint, checkpoint.Assumptions, evidenceResult.References);
-
-        if (result is PlanningCandidatesGeneratedResult generated && generated.Candidates.Any(candidate => !HasExactTaskScope(candidate, requiredTasks.Keys)))
-            return Invalid(checkpoint, "SCHEDULE_SCOPE_MISMATCH", "Scheduler candidate task placements do not match the interpreted task scope.", window.Id);
-
-        return AddScopeAndEvidenceToCandidates(result, evidenceResult.References, checkpoint.ProposedTaskIds);
+            interpretation.ProposedTaskIds
+                .Where(taskId => !request.CompletedTaskIds.Contains(taskId, StringComparer.OrdinalIgnoreCase))
+                .ToArray());
     }
 
     private async Task<PlanningEvidenceRetrievalResult> RetrieveEvidenceAsync(
         PlanningRequest request,
         PlanningInterpretation interpretation,
         IEnumerable<AssetReadModel> assets,
+        IReadOnlyCollection<string> knownAssetIds,
         MaintenanceWindowReadModel window,
         IEnumerable<MaintenanceTaskReadModel> tasks,
         CancellationToken cancellationToken)
@@ -531,6 +552,16 @@ public sealed class PlanningWorkflow(
                         if (!hasConflictIndicator)
                             return false;
 
+                        // A statement that names other assets but not this task's asset is about those assets and
+                        // cannot contradict this task, e.g. the P-102 inspection-only scope when planning P-103
+                        if (!MentionsAsset(excerpt, task.AssetId) &&
+                            knownAssetIds.Any(assetId =>
+                                !string.Equals(assetId, task.AssetId, StringComparison.OrdinalIgnoreCase) &&
+                                MentionsAsset(excerpt, assetId)))
+                        {
+                            return false;
+                        }
+
                         // Filter out scope-boundary statements that explicitly reference this asset
                         // e.g., "Do not substitute this scope for the P-101 bearing-replacement scope"
                         // These are clarifications, not contradictions
@@ -587,6 +618,13 @@ public sealed class PlanningWorkflow(
         return new PlanningEvidenceRetrievalResult(distinctEvidence, violations);
     }
 
+
+    // Whole identifier only, so P-101 is not found inside P-1011
+    private static bool MentionsAsset(string text, string assetId) =>
+        Regex.IsMatch(
+            text,
+            $@"(?<![\p{{L}}\p{{N}}-]){Regex.Escape(assetId)}(?![\p{{L}}\p{{N}}-])",
+            RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
 
     private sealed record PlanningEvidenceRetrievalResult(
         IReadOnlyList<PlanningEvidenceReference> References,
@@ -706,6 +744,53 @@ public sealed class PlanningWorkflow(
             requiredTasks[followUp.Id] = followUp;
             currentTask = followUp;
         }
+    }
+
+    /// <summary>
+    /// AI03 draft saving: adds the candidates the model saved (already validated against this request) to the
+    /// generated, unapproved candidates. A saved candidate is added only when it covers exactly the required task scope,
+    /// like every scheduler candidate, and is not a copy of one; every saved candidate gets a note saying what happened.
+    /// </summary>
+    private PlanningWorkflowResult IncludeModelCandidates(
+        PlanningWorkflowResult result,
+        IReadOnlyCollection<string> requiredTaskIds)
+    {
+        var proposals = modelCandidates?.Proposals ?? [];
+        if (proposals.Count == 0)
+            return result;
+
+        if (result is not PlanningCandidatesGeneratedResult generated)
+        {
+            return result with
+            {
+                ModelCandidateNotes = proposals
+                    .Select(proposal => $"Model-proposed candidate {proposal.Number} was not included: the planning outcome is {result.GetType().Name.Replace("Planning", string.Empty).Replace("Result", string.Empty)}.")
+                    .ToArray()
+            };
+        }
+
+        var candidates = generated.Candidates.ToList();
+        var notes = new List<string>();
+        foreach (var proposal in proposals)
+        {
+            var copyOf = candidates.FindIndex(candidate => ModelCandidateProposals.SamePlacements(candidate, proposal.Candidate));
+            if (!HasExactTaskScope(proposal.Candidate, requiredTaskIds))
+            {
+                notes.Add($"Model-proposed candidate {proposal.Number} was not included: it does not cover exactly the required tasks ({string.Join(", ", requiredTaskIds)}).");
+            }
+            else if (copyOf >= 0)
+            {
+                notes.Add($"Model-proposed candidate {proposal.Number} was not included: it is identical to candidate {copyOf + 1}.");
+            }
+            else
+            {
+                candidates.Add(proposal.Candidate);
+                notes.Add($"Model-proposed candidate {proposal.Number} was included as candidate {candidates.Count}.");
+            }
+        }
+
+        CandidateCostCalculator.ApplyRankingMetadata(candidates);
+        return generated with { Candidates = candidates, ModelCandidateNotes = notes };
     }
 
     private static PlanningWorkflowResult AddScopeAndEvidenceToCandidates(

@@ -41,9 +41,13 @@ public sealed class PlanningJobWorker(
 
     private async Task ProcessAsync(ClaimedPlanningJob job, CancellationToken stoppingToken)
     {
-        var expectedVersion = job.ConcurrencyVersion;
         using var processingCancellation = CancellationTokenSource.CreateLinkedTokenSource(stoppingToken);
         await using var processorScope = scopeFactory.CreateAsyncScope();
+        // The processor's checkpoint write and this worker's lease writes share the scope's execution context, so
+        // they run one at a time and always use the job's latest version.
+        var execution = processorScope.ServiceProvider.GetService<PlanningJobExecutionContext>()
+            ?? new PlanningJobExecutionContext();
+        execution.Begin(job);
         var processor = processorScope.ServiceProvider.GetRequiredService<IPlanningJobProcessor>();
         Task<PlanningJobProcessingResult> processTask;
 
@@ -58,15 +62,12 @@ public sealed class PlanningJobWorker(
                 if (processTask.IsCompleted)
                     break;
 
-                var renewedVersion = await RenewLeaseAsync(job, expectedVersion, stoppingToken);
-                if (renewedVersion is null)
+                if (!await RenewLeaseAsync(execution, stoppingToken))
                 {
                     leaseLost = true;
                     await processingCancellation.CancelAsync();
                     break;
                 }
-
-                expectedVersion = renewedVersion.Value;
             }
 
             if (leaseLost)
@@ -76,7 +77,7 @@ public sealed class PlanningJobWorker(
             }
 
             var result = await processTask;
-            var saved = await CompleteAsync(job, expectedVersion, result.ResultPayload, stoppingToken);
+            var saved = await CompleteAsync(execution, result.ResultPayload, stoppingToken);
             if (!saved)
             {
                 logger.LogWarning(
@@ -86,17 +87,23 @@ public sealed class PlanningJobWorker(
         }
         catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
         {
-            // The lease expires and makes the job eligible for recovery after shutdown.
+            // Graceful shutdown: return the job to the queue without consuming this attempt. If the release
+            // cannot be recorded, the lease expires and makes the job eligible for recovery after shutdown.
+            await ReleaseAsync(execution);
         }
         catch (OperationCanceledException) when (processingCancellation.IsCancellationRequested)
         {
             logger.LogWarning("Processing for planning job {JobId} stopped after lease loss.", job.Id);
         }
+        catch (PlanningJobLeaseLostException)
+        {
+            // A checkpoint write found that another worker owns the job; leave it to that owner.
+            logger.LogWarning("Processing for planning job {JobId} stopped after lease loss.", job.Id);
+        }
         catch (PlanningJobProcessingException exception)
         {
             await RecordFailureAsync(
-                job,
-                expectedVersion,
+                execution,
                 exception.FailureCode,
                 exception.Message,
                 exception.IsTransient);
@@ -112,67 +119,73 @@ public sealed class PlanningJobWorker(
         {
             logger.LogError(exception, "Unexpected failure while processing planning job {JobId}.", job.Id);
             await RecordFailureAsync(
-                job,
-                expectedVersion,
+                execution,
                 "UNEXPECTED_PROCESSING_FAILURE",
                 "Planning failed because of an unexpected internal error.",
                 isTransient: true);
         }
     }
 
-    private async Task<int?> RenewLeaseAsync(
-        ClaimedPlanningJob job,
-        int expectedVersion,
+    private async Task<bool> RenewLeaseAsync(
+        PlanningJobExecutionContext execution,
         CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var planningJobs = scope.ServiceProvider.GetRequiredService<IPlanningJobs>();
-        return await planningJobs.RenewLeaseAsync(
-            job.Id,
-            job.LeaseToken,
-            expectedVersion,
-            DateTimeOffset.UtcNow,
-            _leaseDuration,
+        var job = execution.Job;
+        var renewedVersion = await execution.AdvanceAsync(
+            version => planningJobs.RenewLeaseAsync(
+                job.Id,
+                job.LeaseToken,
+                version,
+                DateTimeOffset.UtcNow,
+                _leaseDuration,
+                cancellationToken),
             cancellationToken);
+        return renewedVersion is not null;
     }
 
     private async Task<bool> CompleteAsync(
-        ClaimedPlanningJob job,
-        int expectedVersion,
+        PlanningJobExecutionContext execution,
         string resultPayload,
         CancellationToken cancellationToken)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var planningJobs = scope.ServiceProvider.GetRequiredService<IPlanningJobs>();
-        return await planningJobs.CompleteAsync(
-            job.Id,
-            job.LeaseToken,
-            expectedVersion,
-            resultPayload,
-            DateTimeOffset.UtcNow,
+        var job = execution.Job;
+        return await execution.FinishAsync(
+            version => planningJobs.CompleteAsync(
+                job.Id,
+                job.LeaseToken,
+                version,
+                resultPayload,
+                DateTimeOffset.UtcNow,
+                cancellationToken),
             cancellationToken);
     }
 
     private async Task RecordFailureAsync(
-        ClaimedPlanningJob job,
-        int expectedVersion,
+        PlanningJobExecutionContext execution,
         string failureCode,
         string errorMessage,
         bool isTransient)
     {
         await using var scope = scopeFactory.CreateAsyncScope();
         var planningJobs = scope.ServiceProvider.GetRequiredService<IPlanningJobs>();
+        var job = execution.Job;
         bool recorded;
         try
         {
-            recorded = await planningJobs.FailAsync(
-                job.Id,
-                job.LeaseToken,
-                expectedVersion,
-                failureCode,
-                errorMessage,
-                isTransient,
-                DateTimeOffset.UtcNow,
+            recorded = await execution.FinishAsync(
+                version => planningJobs.FailAsync(
+                    job.Id,
+                    job.LeaseToken,
+                    version,
+                    failureCode,
+                    errorMessage,
+                    isTransient,
+                    DateTimeOffset.UtcNow,
+                    CancellationToken.None),
                 CancellationToken.None);
         }
         catch (DbUpdateConcurrencyException exception)
@@ -188,6 +201,45 @@ public sealed class PlanningJobWorker(
         {
             logger.LogWarning(
                 "Failure for planning job {JobId} was not recorded because its lease is no longer valid.",
+                job.Id);
+        }
+    }
+
+    private async Task ReleaseAsync(PlanningJobExecutionContext execution)
+    {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var planningJobs = scope.ServiceProvider.GetRequiredService<IPlanningJobs>();
+        var job = execution.Job;
+        bool released;
+        try
+        {
+            released = await execution.FinishAsync(
+                version => planningJobs.ReleaseAsync(
+                    job.Id,
+                    job.LeaseToken,
+                    version,
+                    CancellationToken.None),
+                CancellationToken.None);
+        }
+        catch (DbUpdateConcurrencyException exception)
+        {
+            logger.LogWarning(
+                exception,
+                "Release of planning job {JobId} at shutdown conflicted with a newer version; its lease will expire instead.",
+                job.Id);
+            return;
+        }
+
+        if (released)
+        {
+            logger.LogInformation(
+                "Planning job {JobId} was returned to the queue at shutdown without consuming an attempt.",
+                job.Id);
+        }
+        else
+        {
+            logger.LogWarning(
+                "Planning job {JobId} was not released at shutdown because this worker no longer owns it.",
                 job.Id);
         }
     }

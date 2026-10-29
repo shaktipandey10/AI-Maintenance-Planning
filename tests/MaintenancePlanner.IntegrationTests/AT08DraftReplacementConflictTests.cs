@@ -55,18 +55,19 @@ public sealed class AT08DraftReplacementConflictTests
             Assert.Equal(1m, br101.OnHandQuantity); // Total on hand (1 unit seeded)
         }
 
-        // Step 2: Reduce inventory to force V2 approval to fail
-        // Reduce BR-101 on-hand from 10 to 1 (leaving 0 available since V1 reserves 1)
+        // Step 2: Draft V2 as a replacement planning job of V1, then force a reservation conflict.
+        // V2 may reuse the unit V1 releases, so the conflict is a stock correction that removes the only BR-101.
+        var v2JobId = Guid.NewGuid();
         await using (var dbContext = fixture.CreateDbContext())
         {
+            await ApprovalTestSupport.AddSucceededJobAsync(dbContext, v2JobId, originalJobId: jobId);
             var br101 = await dbContext.SpareParts.SingleAsync(p => p.Id == "BR-101");
-            br101.OnHandQuantity = 1m; // Only 1 left, but 1 is already reserved for V1
+            br101.OnHandQuantity = 0m;
             await dbContext.SaveChangesAsync();
         }
 
-        // Step 3: Create V2 approval (replacement draft for same job)
-        // This should fail because total reservations (V1=1 + V2=1) exceed available (0)
-        var v2Result = await approvalService.ApproveDraftReplacementAsync(jobId, CancellationToken.None);
+        // Step 3: Approve V2; the replacement needs 1 BR-101 but 0 exist even after releasing V1's unit
+        var v2Result = await approvalService.ApproveDraftReplacementAsync(v2JobId, CancellationToken.None);
 
         // V2 should fail with conflict
         Assert.False(v2Result.Succeeded);
@@ -89,15 +90,14 @@ public sealed class AT08DraftReplacementConflictTests
             Assert.Equal(1m, v1Reservations[0].QuantityReserved); // Quantity unchanged
         }
 
-        // Step 5: Verify no new draft was created (or if created, it's not approved)
+        // Step 5: Verify no V2 draft was created and V1 is the only approved draft
         await using (var dbContext = fixture.CreateDbContext())
         {
-            var allDrafts = await dbContext.Drafts
-                .Where(d => d.PlanningJobId == jobId)
-                .ToListAsync();
+            Assert.False(await dbContext.Drafts.AnyAsync(d => d.PlanningJobId == v2JobId));
 
-            // Either still only V1, or V2 exists but is not approved
-            var approvedDrafts = allDrafts.Where(d => d.Status == DraftStatus.Approved).ToList();
+            var approvedDrafts = await dbContext.Drafts
+                .Where(d => d.Status == DraftStatus.Approved)
+                .ToListAsync();
             Assert.Single(approvedDrafts); // Only one approved draft (V1)
             Assert.Equal(v1DraftId, approvedDrafts[0].Id);
         }
@@ -106,7 +106,7 @@ public sealed class AT08DraftReplacementConflictTests
         await using (var dbContext = fixture.CreateDbContext())
         {
             var br101 = await dbContext.SpareParts.SingleAsync(p => p.Id == "BR-101");
-            Assert.Equal(1m, br101.OnHandQuantity); // Unchanged
+            Assert.Equal(0m, br101.OnHandQuantity); // Stock correction applied
             Assert.Equal(1m, br101.ReservedQuantity); // Only V1's reservation
 
             var allConfirmedReservations = await dbContext.Reservations
@@ -117,50 +117,11 @@ public sealed class AT08DraftReplacementConflictTests
         }
     }
 
-    private static async Task CreatePlanningJobWithBR101RequirementAsync(
+    // Approval revalidates the candidate, so the job carries a schedulable P-101 candidate requiring one BR-101.
+    private static Task CreatePlanningJobWithBR101RequirementAsync(
         MaintenancePlannerDbContext dbContext,
-        Guid jobId)
-    {
-        var planningJob = new PlanningJob
-        {
-            Id = jobId,
-            OperationId = Guid.NewGuid(),
-            RequestPayload = """{"requestText":"Plan bearing replacement for P-101.","assetIds":["P-101"]}""",
-            Status = Domain.Entities.PlanningJobStatus.Succeeded,
-            CreatedAtUtc = DateTimeOffset.UtcNow,
-            CompletedAtUtc = DateTimeOffset.UtcNow,
-            ResultPayload = $$"""
-                {
-                  "outcome": "CandidatesGenerated",
-                  "result": {
-                    "candidates": [
-                      {
-                        "taskPlacements": [],
-                        "rationale": "Test candidate requiring BR-101",
-                        "evidenceReferences": [],
-                        "requestedTaskIds": ["P101-BEARING-REPLACEMENT"],
-                        "dependencyTaskIds": []
-                      }
-                    ],
-                    "assumptions": [],
-                    "evidenceReferences": [],
-                    "interpretation": {
-                      "maintenanceIntent": "Replace bearing",
-                      "scope": "P-101",
-                      "proposedAssetIds": ["P-101"],
-                      "proposedTaskIds": ["P101-BEARING-REPLACEMENT"],
-                      "missingInformation": [],
-                      "assumptions": [],
-                      "scopeResolution": "Resolved",
-                      "scopeMappings": []
-                    }
-                  }
-                }
-                """
-        };
-        await dbContext.PlanningJobs.AddAsync(planningJob);
-        await dbContext.SaveChangesAsync();
-    }
+        Guid jobId) =>
+        ApprovalTestSupport.AddSucceededJobAsync(dbContext, jobId);
 
     private sealed class ApprovalTestFixture : IAsyncDisposable
     {
@@ -198,8 +159,7 @@ public sealed class AT08DraftReplacementConflictTests
             var services = new ServiceCollection();
             services.AddDbContext<MaintenancePlannerDbContext>(db =>
                 db.UseSqlite(connectionString));
-            services.AddScoped<IMaintenancePlannerQueries, MaintenancePlannerQueries>();
-            services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            services.AddApprovalServices();
 
             var serviceProvider = services.BuildServiceProvider();
 

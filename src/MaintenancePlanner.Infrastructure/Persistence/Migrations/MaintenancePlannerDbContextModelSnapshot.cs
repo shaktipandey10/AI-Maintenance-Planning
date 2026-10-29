@@ -42,6 +42,44 @@ namespace MaintenancePlanner.Infrastructure.Persistence.Migrations
                     b.ToTable("Assets");
                 });
 
+            modelBuilder.Entity("MaintenancePlanner.Domain.Entities.BusinessActionRecord", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Action")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Details")
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("DraftId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("PerformedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("PerformedBy")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid?>("PlanningJobId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TaskId")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DraftId", "PerformedAtUtc");
+
+                    b.HasIndex("PlanningJobId", "PerformedAtUtc");
+
+                    b.ToTable("BusinessActionRecords");
+                });
+
             modelBuilder.Entity("MaintenancePlanner.Domain.Entities.Draft", b =>
                 {
                     b.Property<Guid>("Id")
@@ -70,6 +108,34 @@ namespace MaintenancePlanner.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("Drafts");
+                });
+
+            modelBuilder.Entity("MaintenancePlanner.Domain.Entities.DraftTaskProgress", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT");
+
+                    b.Property<Guid>("DraftId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("TaskId")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DraftId", "TaskId")
+                        .IsUnique();
+
+                    b.ToTable("DraftTaskProgress");
                 });
 
             modelBuilder.Entity("MaintenancePlanner.Domain.Entities.EditedTaskPlacement", b =>
@@ -496,6 +562,17 @@ namespace MaintenancePlanner.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("PlanningJob");
+                });
+
+            modelBuilder.Entity("MaintenancePlanner.Domain.Entities.DraftTaskProgress", b =>
+                {
+                    b.HasOne("MaintenancePlanner.Domain.Entities.Draft", "Draft")
+                        .WithMany()
+                        .HasForeignKey("DraftId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Draft");
                 });
 
             modelBuilder.Entity("MaintenancePlanner.Domain.Entities.EditedTaskPlacement", b =>

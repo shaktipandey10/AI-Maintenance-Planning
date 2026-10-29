@@ -221,16 +221,17 @@ public sealed class AT10TechnicianOverlapTests
         await using var fixture = await ApprovalTestFixture.CreateAsync();
         var jobId = Guid.NewGuid();
 
-        var windowStart = DateTimeOffset.UtcNow;
+        // Window MW-P101-BASELINE-20261024 starts 2026-10-24 08:00 +05:30
+        var windowStart = new DateTimeOffset(2026, 10, 24, 8, 0, 0, TimeSpan.FromHours(5.5));
 
-        // Create planning job with valid (non-overlapping) task placements
+        // Create planning job with valid (non-overlapping, qualified, full-crew) task placements
         await using (var dbContext = fixture.CreateDbContext())
         {
             var placements = new[]
             {
                 new { taskId = "P101-PREP", start = windowStart.AddMinutes(0), end = windowStart.AddMinutes(60), technicianIds = new[] { "TECH-001" } },
-                new { taskId = "P101-BEARING-REPLACEMENT", start = windowStart.AddMinutes(60), end = windowStart.AddMinutes(240), technicianIds = new[] { "TECH-001" } },
-                new { taskId = "P101-VERIFICATION", start = windowStart.AddMinutes(240), end = windowStart.AddMinutes(360), technicianIds = new[] { "TECH-002" } }
+                new { taskId = "P101-BEARING-REPLACEMENT", start = windowStart.AddMinutes(60), end = windowStart.AddMinutes(240), technicianIds = new[] { "TECH-001", "TECH-002" } },
+                new { taskId = "P101-VERIFICATION", start = windowStart.AddMinutes(240), end = windowStart.AddMinutes(360), technicianIds = new[] { "TECH-003" } }
             };
 
             var result = new
@@ -256,7 +257,7 @@ public sealed class AT10TechnicianOverlapTests
             {
                 Id = jobId,
                 OperationId = Guid.NewGuid(),
-                RequestPayload = """{"requestText":"Plan P-101 bearing replacement","assetIds":["P-101"]}""",
+                RequestPayload = ApprovalTestSupport.RequestPayload("Plan P-101 bearing replacement"),
                 Status = PlanningJobStatus.Succeeded,
                 CreatedAtUtc = DateTimeOffset.UtcNow,
                 CompletedAtUtc = DateTimeOffset.UtcNow,
@@ -374,7 +375,7 @@ public sealed class AT10TechnicianOverlapTests
             var builder = WebApplication.CreateBuilder();
             builder.Services.AddDbContext<MaintenancePlannerDbContext>(db =>
                 db.UseSqlite(connectionString));
-            builder.Services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            builder.Services.AddApprovalServices();
 
             var app = builder.Build();
 

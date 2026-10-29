@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiClient } from '../services/apiClient';
 import html2pdf from 'html2pdf.js';
-import type { PlanProgressResponse } from '../types/api';
+import type { PlanProgressResponse, TaskProgressStatus } from '../types/api';
 import '../styles/ProgressScreen.css';
 
 interface ProgressScreenProps {
@@ -20,6 +20,8 @@ export const ProgressScreen: React.FC<ProgressScreenProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [completingTask, setCompletingTask] = useState<string | null>(null);
   const [completionError, setCompletionError] = useState<string | null>(null);
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
+  const [taskStatusError, setTaskStatusError] = useState<string | null>(null);
   const [pdfExportLoading, setPdfExportLoading] = useState(false);
   const [pdfExportError, setPdfExportError] = useState<string | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -61,6 +63,21 @@ export const ProgressScreen: React.FC<ProgressScreenProps> = ({
     } catch (err) {
       setCompletionError(err instanceof Error ? err.message : 'Failed to complete task');
       setCompletingTask(null);
+    }
+  };
+
+  const handleUpdateTaskStatus = async (taskId: string, status: TaskProgressStatus) => {
+    setUpdatingTaskId(taskId);
+    setTaskStatusError(null);
+
+    try {
+      await apiClient.updateTaskStatus(draftId, taskId, status);
+      const updatedProgress = await apiClient.getPlanProgress(draftId);
+      setProgress(updatedProgress);
+    } catch (err) {
+      setTaskStatusError(err instanceof Error ? err.message : 'Failed to update task status');
+    } finally {
+      setUpdatingTaskId(null);
     }
   };
 
@@ -218,6 +235,53 @@ export const ProgressScreen: React.FC<ProgressScreenProps> = ({
             <span className="progress-percent">{progressPercent}% Complete</span>
           </div>
         </section>
+
+        {/* Task statuses: each task moves forward only, NotStarted → InProgress → Completed */}
+        {progress.taskStatuses && progress.taskStatuses.length > 0 && (
+          <section className="detail-section">
+            <h2>Task Status</h2>
+            {taskStatusError && (
+              <div className="alert alert-error">{taskStatusError}</div>
+            )}
+            <div className="tasks-list">
+              {progress.taskStatuses.map((task) => {
+                const nextStatus: TaskProgressStatus | null =
+                  task.status === 'NotStarted' ? 'InProgress'
+                    : task.status === 'InProgress' ? 'Completed'
+                      : null;
+                const statusLabel =
+                  task.status === 'NotStarted' ? 'Not started'
+                    : task.status === 'InProgress' ? 'In progress'
+                      : '✓ Completed';
+
+                return (
+                  <div
+                    key={task.taskId}
+                    className={`task-card ${task.status === 'Completed' ? 'complete' : ''}`}
+                  >
+                    <div className="task-header">
+                      <span className="part-id">{task.taskId}</span>
+                      <span className={`status-badge ${task.status === 'Completed' ? 'status-complete' : 'status-pending'}`}>
+                        {statusLabel}
+                      </span>
+                    </div>
+                    {nextStatus && (
+                      <button
+                        onClick={() => handleUpdateTaskStatus(task.taskId, nextStatus)}
+                        disabled={updatingTaskId === task.taskId}
+                        className="btn btn-secondary btn-mark-complete"
+                      >
+                        {updatingTaskId === task.taskId
+                          ? '⏳ Updating...'
+                          : nextStatus === 'InProgress' ? '▶ Start' : '✓ Complete'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* Tasks */}
         <section className="detail-section">

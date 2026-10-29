@@ -20,6 +20,8 @@ public static class OllamaPlanningServiceCollectionExtensions
             .Validate(options => !string.IsNullOrWhiteSpace(options.Model), "Ollama:Model is required.")
             .Validate(options => options.TimeoutSeconds is > 0 and <= 600,
                 "Ollama:TimeoutSeconds must be between 1 and 600.")
+            .Validate(options => options.MaxToolCalls is > 0 and <= 20,
+                "Ollama:MaxToolCalls must be between 1 and 20.")
             .ValidateOnStart();
 
         services.AddHttpClient<IPlanningRequestInterpreter, OllamaPlanningRequestInterpreter>(

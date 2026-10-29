@@ -9,7 +9,8 @@ namespace MaintenancePlanner.Infrastructure.Edits;
 
 public sealed class EditValidationService(
     MaintenancePlannerDbContext dbContext,
-    IMaintenancePlannerQueries queries) : IEditValidationService
+    IMaintenancePlannerQueries queries,
+    EditedPlanValidator? planValidator = null) : IEditValidationService
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -81,7 +82,17 @@ public sealed class EditValidationService(
             }
         }
 
+        // The draft's own unconsumed reservations already hold its parts, so they count as available to its edits
+        var heldByDraft = (await dbContext.Reservations
+                .AsNoTracking()
+                .Where(r => r.DraftId == draftId && r.Status == ReservationStatus.Confirmed && r.CompletedAtUtc == null)
+                .Select(r => new { r.SparePartId, r.QuantityReserved })
+                .ToListAsync(cancellationToken))
+            .GroupBy(r => r.SparePartId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Sum(r => r.QuantityReserved), StringComparer.OrdinalIgnoreCase);
+
         var violations = new List<ValidationViolation>();
+        var violationsByEdit = new Dictionary<EditedTaskPlacement, List<ValidationViolation>>();
         var validCount = 0;
 
         // Validate each edit
@@ -131,12 +142,12 @@ public sealed class EditValidationService(
                             "PART_NOT_FOUND",
                             $"Spare part {taskDef.RequiredPartId} not found"));
                     }
-                    else if (part.AvailableQuantity < taskDef.RequiredPartQuantity)
+                    else if (part.AvailableQuantity + heldByDraft.GetValueOrDefault(part.Id) < taskDef.RequiredPartQuantity)
                     {
                         editViolations.Add(new ValidationViolation(
                             edit.TaskId,
                             "PART_UNAVAILABLE",
-                            $"Spare part {taskDef.RequiredPartId} has {part.AvailableQuantity} available but {taskDef.RequiredPartQuantity} required"));
+                            $"Spare part {taskDef.RequiredPartId} has {part.AvailableQuantity + heldByDraft.GetValueOrDefault(part.Id)} available to this plan but {taskDef.RequiredPartQuantity} required"));
                     }
                 }
 
@@ -200,6 +211,30 @@ public sealed class EditValidationService(
                 }
             }
 
+            violationsByEdit[edit] = editViolations;
+        }
+
+        // FR05: the edits are also checked together, as the plan they would produce, exactly as revision creation
+        // checks them (order, overlaps, locks, task progress). A plan violation on an edited task invalidates that edit;
+        // one on a task nobody edited (e.g. a successor the edits now overlap) invalidates every edit. Drafts without a
+        // stored approved plan keep the edit-by-edit checks only.
+        if (planValidator is not null &&
+            await planValidator.CheckAsync(draft, planningJob.RequestPayload, edits, cancellationToken) is { } plan)
+        {
+            foreach (var planViolation in plan.Violations)
+            {
+                var affected = edits.Where(e => string.Equals(e.TaskId, planViolation.TaskId, StringComparison.OrdinalIgnoreCase)).ToList();
+                foreach (var edit in affected.Count > 0 ? affected : edits)
+                    violationsByEdit[edit].Add(planViolation);
+            }
+        }
+
+        foreach (var edit in edits)
+        {
+            var editViolations = violationsByEdit[edit]
+                .DistinctBy(v => (v.TaskId, v.Code, v.Message))
+                .ToList();
+
             // Update edit with validation results
             if (editViolations.Count == 0)
             {
@@ -220,6 +255,7 @@ public sealed class EditValidationService(
             dbContext.EditedTaskPlacements.Update(edit);
         }
 
+        violations = violations.DistinctBy(v => (v.TaskId, v.Code, v.Message)).ToList();
         await dbContext.SaveChangesAsync(cancellationToken);
 
         return new EditValidationResult(

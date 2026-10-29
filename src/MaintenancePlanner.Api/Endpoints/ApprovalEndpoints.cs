@@ -15,38 +15,16 @@ public static class ApprovalEndpoints
         app.MapPost("/api/drafts/{planningJobId:guid}/approve",
                 async Task<Results<Accepted, Conflict<ApprovalErrorResponse>>> (
                     Guid planningJobId,
+                    ApproveDraftRequest? request,
                     IDraftApprovalService approvalService,
-                    IPlanningJobs planningJobs,
                     CancellationToken cancellationToken) =>
                 {
-                    var planningJob = await planningJobs.GetAsync(planningJobId, cancellationToken);
-                    if (planningJob is null)
-                    {
-                        var notFoundResponse = new ApprovalErrorResponse("PlanningJob", "PLANNING_JOB_NOT_FOUND", planningJobId.ToString(), "Planning job not found");
-                        return TypedResults.Conflict(notFoundResponse);
-                    }
-
-                    DraftApprovalResult result;
-
-                    if (planningJob.OriginalJobId.HasValue)
-                    {
-                        var originalDraft = await approvalService.GetApprovedDraftForJobAsync(planningJob.OriginalJobId.Value, cancellationToken);
-                        if (originalDraft is null)
-                        {
-                            var noDraftResponse = new ApprovalErrorResponse(
-                                "PlanningJob",
-                                "NO_APPROVED_ORIGINAL_DRAFT",
-                                planningJob.OriginalJobId.Value.ToString(),
-                                "Original job has no approved draft; cannot create replacement");
-                            return TypedResults.Conflict(noDraftResponse);
-                        }
-
-                        result = await approvalService.ApproveDraftReplacementAsync(planningJobId, cancellationToken);
-                    }
-                    else
-                    {
-                        result = await approvalService.ApproveDraftAsync(planningJobId, cancellationToken);
-                    }
+                    // Replacement jobs (with an original job) are routed by the service, which supersedes the
+                    // original approved draft in the same transaction.
+                    var result = await approvalService.ApproveDraftAsync(
+                        planningJobId,
+                        request?.CandidateIndex,
+                        cancellationToken);
 
                     if (result.Succeeded)
                         return TypedResults.Accepted($"/api/drafts/{result.DraftId}");
@@ -63,6 +41,7 @@ public static class ApprovalEndpoints
                 })
             .WithName("ApproveDraft")
             .WithSummary("Approve a planning draft and reserve required spare parts")
+            .WithDescription("Approves the candidate selected by the optional body {\"candidateIndex\": n}. The index may be omitted only when the job has exactly one candidate; otherwise 409 CANDIDATE_SELECTION_REQUIRED is returned. The candidate is revalidated against current data before parts are reserved.")
             .Produces(StatusCodes.Status202Accepted)
             .Produces<ApprovalErrorResponse>(StatusCodes.Status409Conflict);
 
@@ -118,6 +97,20 @@ public static class ApprovalEndpoints
                 CandidateResponse? selectedCandidate = null;
                 InterpretationResponse? interpretation = null;
 
+                // The selected candidate is the one approval stored in the draft's snapshot.
+                if (!string.IsNullOrEmpty(draft.ApprovedCandidatePayload))
+                {
+                    try
+                    {
+                        using var snapshotDoc = JsonDocument.Parse(draft.ApprovedCandidatePayload);
+                        selectedCandidate = ToCandidateResponse(snapshotDoc.RootElement);
+                    }
+                    catch (JsonException)
+                    {
+                        // An unreadable snapshot is reported as no selected candidate rather than guessed.
+                    }
+                }
+
                 // Parse candidates from result payload if available
                 if (!string.IsNullOrEmpty(planningJob.ResultPayload))
                 {
@@ -131,37 +124,10 @@ public static class ApprovalEndpoints
                             var result = resultDoc.RootElement.GetProperty("result");
                             var candidates = result.GetProperty("candidates").EnumerateArray().ToList();
 
-                            // Return first candidate as the selected one
-                            if (candidates.Count > 0)
-                            {
-                                var c = candidates[0];
-                                selectedCandidate = new CandidateResponse(
-                                    Rationale: GetStringProperty(c, "rationale") ?? "",
-                                    RequestedTaskIds: GetStringArrayProperty(c, "requestedTaskIds"),
-                                    DependencyTaskIds: GetStringArrayProperty(c, "dependencyTaskIds"),
-                                    TaskPlacements: c.TryGetProperty("taskPlacements", out var taskPlacementsElem)
-                                        ? taskPlacementsElem.Deserialize<List<object>>() ?? []
-                                        : [],
-                                    EvidenceReferences: GetStringArrayProperty(c, "evidenceReferences"),
-                                    TotalLabourCostAmount: c.TryGetProperty("totalLabourCostAmount", out var costAmount)
-                                        ? costAmount.GetDecimal()
-                                        : 0m,
-                                    TotalLabourCostCurrency: GetStringProperty(c, "totalLabourCostCurrency") ?? "UNKNOWN",
-                                    CompletionTimeMinutes: c.TryGetProperty("completionTimeMinutes", out var time)
-                                        ? time.GetInt64()
-                                        : 0L,
-                                    DeferralReasons: c.TryGetProperty("deferralReasons", out var deferralElem)
-                                        ? deferralElem.EnumerateArray()
-                                            .Select(d => new DeferralReasonResponse(
-                                                TaskId: GetStringProperty(d, "taskId") ?? "",
-                                                Reason: GetStringProperty(d, "reason") ?? ""))
-                                            .ToList()
-                                        : [],
-                                    IsLowestCostCandidate: c.TryGetProperty("isLowestCostCandidate", out var isLowest)
-                                        ? isLowest.GetBoolean()
-                                        : false,
-                                    CostComparabilityWarning: GetStringProperty(c, "costComparabilityWarning"));
-                            }
+                            // Drafts approved before snapshots were stored were always approved from the first
+                            // candidate, so that is their selected candidate.
+                            if (draft.ApprovedCandidatePayload is null && candidates.Count > 0)
+                                selectedCandidate = ToCandidateResponse(candidates[0]);
 
                             // Extract interpretation if available
                             if (result.TryGetProperty("interpretation", out var interpretationElement))
@@ -212,6 +178,34 @@ public static class ApprovalEndpoints
 
         return app;
     }
+
+    private static CandidateResponse ToCandidateResponse(JsonElement c) =>
+        new(
+            Rationale: GetStringProperty(c, "rationale") ?? "",
+            RequestedTaskIds: GetStringArrayProperty(c, "requestedTaskIds"),
+            DependencyTaskIds: GetStringArrayProperty(c, "dependencyTaskIds"),
+            TaskPlacements: c.TryGetProperty("taskPlacements", out var taskPlacementsElem)
+                ? taskPlacementsElem.Deserialize<List<object>>() ?? []
+                : [],
+            EvidenceReferences: GetStringArrayProperty(c, "evidenceReferences"),
+            TotalLabourCostAmount: c.TryGetProperty("totalLabourCostAmount", out var costAmount)
+                ? costAmount.GetDecimal()
+                : 0m,
+            TotalLabourCostCurrency: GetStringProperty(c, "totalLabourCostCurrency") ?? "UNKNOWN",
+            CompletionTimeMinutes: c.TryGetProperty("completionTimeMinutes", out var time)
+                ? time.GetInt64()
+                : 0L,
+            DeferralReasons: c.TryGetProperty("deferralReasons", out var deferralElem)
+                ? deferralElem.EnumerateArray()
+                    .Select(d => new DeferralReasonResponse(
+                        TaskId: GetStringProperty(d, "taskId") ?? "",
+                        Reason: GetStringProperty(d, "reason") ?? ""))
+                    .ToList()
+                : [],
+            IsLowestCostCandidate: c.TryGetProperty("isLowestCostCandidate", out var isLowest)
+                ? isLowest.GetBoolean()
+                : false,
+            CostComparabilityWarning: GetStringProperty(c, "costComparabilityWarning"));
 
     /// <summary>Safely extract a string property from a JsonElement, handling cases where the property might be an object or null.</summary>
     private static string? GetStringProperty(JsonElement element, string propertyName)
@@ -264,6 +258,8 @@ public static class ApprovalEndpoints
         }
     }
 }
+
+public sealed record ApproveDraftRequest(int? CandidateIndex);
 
 public sealed record ApprovalErrorResponse(
     string ResourceType,

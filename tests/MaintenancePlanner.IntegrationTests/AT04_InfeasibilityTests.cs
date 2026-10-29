@@ -270,7 +270,8 @@ public sealed class AT04_InfeasibilityTests
                  directory is not null;
                  directory = directory.Parent)
             {
-                if (File.Exists(Path.Combine(directory.FullName, "requirementsforpoc.md")))
+                if (File.Exists(Path.Combine(directory.FullName, "docs", "requirementsforpoc.md")) ||
+                    File.Exists(Path.Combine(directory.FullName, "requirementsforpoc.md")))
                     return directory.FullName;
             }
 

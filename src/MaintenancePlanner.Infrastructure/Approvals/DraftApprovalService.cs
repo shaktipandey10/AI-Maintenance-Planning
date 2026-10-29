@@ -1,7 +1,9 @@
 using System.Text.Json;
 using MaintenancePlanner.Application.Approvals;
+using MaintenancePlanner.Application.History;
 using MaintenancePlanner.Application.Planning;
-using MaintenancePlanner.Application.Queries;
+using MaintenancePlanner.Application.PlanningJobs;
+using MaintenancePlanner.Application.Validation;
 using MaintenancePlanner.Domain.Entities;
 using MaintenancePlanner.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -9,356 +11,480 @@ using Microsoft.EntityFrameworkCore;
 namespace MaintenancePlanner.Infrastructure.Approvals;
 
 public sealed class DraftApprovalService(
-    MaintenancePlannerDbContext dbContext) : IDraftApprovalService
+    MaintenancePlannerDbContext dbContext,
+    PlanningCandidateValidator candidateValidator,
+    BusinessActor? actor = null) : IDraftApprovalService
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new(JsonSerializerDefaults.Web);
 
-    public async Task<DraftApprovalResult> ApproveDraftAsync(
+    // The validator reads stock from SparePart.ReservedQuantity, which still contains the reservations of the
+    // approved revision being replaced. Stock is instead checked authoritatively inside the approval transaction
+    // (see ReserveParts), where those releasable reservations are excluded.
+    private const string PartUnavailableViolationCode = "PART_UNAVAILABLE";
+
+    public Task<DraftApprovalResult> ApproveDraftAsync(
         Guid planningJobId,
+        CancellationToken cancellationToken) =>
+        ApproveDraftAsync(planningJobId, candidateIndex: null, cancellationToken);
+
+    public Task<DraftApprovalResult> ApproveDraftAsync(
+        Guid planningJobId,
+        int? candidateIndex,
+        CancellationToken cancellationToken) =>
+        ApproveAsync(planningJobId, candidateIndex, requireReplacement: false, cancellationToken);
+
+    public Task<DraftApprovalResult> ApproveDraftReplacementAsync(
+        Guid planningJobId,
+        CancellationToken cancellationToken) =>
+        ApproveDraftReplacementAsync(planningJobId, candidateIndex: null, cancellationToken);
+
+    public Task<DraftApprovalResult> ApproveDraftReplacementAsync(
+        Guid planningJobId,
+        int? candidateIndex,
+        CancellationToken cancellationToken) =>
+        ApproveAsync(planningJobId, candidateIndex, requireReplacement: true, cancellationToken);
+
+    private async Task<DraftApprovalResult> ApproveAsync(
+        Guid planningJobId,
+        int? candidateIndex,
+        bool requireReplacement,
+        CancellationToken cancellationToken)
+    {
+        // Approval is its own unit of work; entities tracked by earlier operations in this scope may hold stale
+        // stock or draft state, so they are discarded and every decision below reads committed rows.
+        if (dbContext.ChangeTracker.HasChanges())
+            throw new InvalidOperationException("Approval cannot run while the DbContext has unsaved changes.");
+        dbContext.ChangeTracker.Clear();
+
+        // SQLite transactions begin IMMEDIATE, so concurrent approvals are serialized here: every read below
+        // (existing drafts, confirmed reservations, stock) sees the committed state of earlier approvals.
+        await using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        try
+        {
+            var result = await ApproveWithinTransactionAsync(
+                planningJobId,
+                candidateIndex,
+                requireReplacement,
+                cancellationToken);
+
+            if (result.Succeeded)
+                await transaction.CommitAsync(cancellationToken);
+            else
+                await transaction.RollbackAsync(cancellationToken);
+
+            return result;
+        }
+        catch (DbUpdateException exception) when (IsUniqueConstraintViolation(exception))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            dbContext.ChangeTracker.Clear();
+
+            var reloadedDraft = await dbContext.Drafts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(d => d.PlanningJobId == planningJobId, cancellationToken);
+            if (reloadedDraft is not null && reloadedDraft.Status == DraftStatus.Approved)
+                return new DraftApprovalResult(true, reloadedDraft.Id);
+
+            return Conflict("Draft", "CONCURRENT_DRAFT_CREATION", planningJobId.ToString(),
+                "Concurrent draft creation detected");
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            dbContext.ChangeTracker.Clear();
+            return Conflict("Draft", "CONCURRENT_MODIFICATION", planningJobId.ToString(),
+                "Concurrent modification detected");
+        }
+    }
+
+    private async Task<DraftApprovalResult> ApproveWithinTransactionAsync(
+        Guid planningJobId,
+        int? candidateIndex,
+        bool requireReplacement,
         CancellationToken cancellationToken)
     {
         var planningJob = await dbContext.PlanningJobs.FirstOrDefaultAsync(
             j => j.Id == planningJobId,
             cancellationToken);
-
         if (planningJob is null)
-            return new DraftApprovalResult(false,
-                FailureReason: "Planning job not found",
-                ConflictData: new ApprovalConflictData("PlanningJob", "PLANNING_JOB_NOT_FOUND", planningJobId.ToString()));
+            return Conflict("PlanningJob", "PLANNING_JOB_NOT_FOUND", planningJobId.ToString(),
+                "Planning job not found");
 
-        if (string.IsNullOrEmpty(planningJob.ResultPayload))
-            return new DraftApprovalResult(false,
-                FailureReason: "Planning job has no result",
-                ConflictData: new ApprovalConflictData("PlanningJob", "PLANNING_JOB_NO_RESULT", planningJobId.ToString()));
+        if (requireReplacement && planningJob.OriginalJobId is null)
+            return Conflict("PlanningJob", "NOT_A_REPLACEMENT_JOB", planningJobId.ToString(),
+                "Planning job is not a replacement of an approved plan");
 
-        Guid? v1DraftIdToCleanup = null;
-        if (planningJob.OriginalJobId.HasValue)
-        {
-            var v1Draft = await GetApprovedDraftForJobAsync(planningJob.OriginalJobId.Value, cancellationToken);
-            if (v1Draft is not null)
-            {
-                v1DraftIdToCleanup = v1Draft.Id;
-            }
-        }
+        if (planningJob.Status != PlanningJobStatus.Succeeded || string.IsNullOrEmpty(planningJob.ResultPayload))
+            return Conflict("PlanningJob", "PLANNING_JOB_NO_RESULT", planningJobId.ToString(),
+                "Planning job has no result");
+
+        if (!TryReadCandidates(planningJob.ResultPayload, out var outcome, out var candidates))
+            return Conflict("PlanningJob", "PLANNING_RESULT_UNREADABLE", planningJobId.ToString(),
+                "Planning job result could not be read");
+
+        if (outcome != "CandidatesGenerated")
+            return Conflict("PlanningJob", "PLANNING_JOB_NOT_APPROVABLE", planningJobId.ToString(),
+                $"Planning job outcome is '{outcome}'; only generated candidates can be approved");
 
         var existingDraft = await dbContext.Drafts.FirstOrDefaultAsync(
             d => d.PlanningJobId == planningJobId,
             cancellationToken);
-
         if (existingDraft is not null)
-        {
-            if (existingDraft.Status == DraftStatus.Approved)
-                return new DraftApprovalResult(true, existingDraft.Id);
-            if (existingDraft.Status == DraftStatus.Cancelled)
-                return new DraftApprovalResult(false,
-                    FailureReason: "Draft was cancelled and cannot be re-approved",
-                    ConflictData: new ApprovalConflictData("Draft", "DRAFT_CANCELLED", existingDraft.Id.ToString()));
-        }
+            return ExistingDraftResult(existingDraft, candidateIndex, candidates);
 
-        var requiredParts = await ExtractRequiredPartsAsync(planningJob, cancellationToken);
-        if (requiredParts.Count == 0)
-            return new DraftApprovalResult(false,
-                FailureReason: "Planning job has no required parts",
-                ConflictData: new ApprovalConflictData("PlanningJob", "PLANNING_JOB_NO_PARTS", planningJobId.ToString()));
+        if (candidates.Count == 0)
+            return Conflict("PlanningJob", "PLANNING_JOB_NO_CANDIDATES", planningJobId.ToString(),
+                "Planning job has no candidates");
 
-        using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
+        if (candidateIndex is null && candidates.Count > 1)
+            return Conflict("Candidate", "CANDIDATE_SELECTION_REQUIRED", planningJobId.ToString(),
+                $"Planning job has {candidates.Count} candidates; select one by candidateIndex");
+
+        var selectedIndex = candidateIndex ?? 0;
+        if (selectedIndex < 0 || selectedIndex >= candidates.Count)
+            return Conflict("Candidate", "CANDIDATE_NOT_FOUND", selectedIndex.ToString(),
+                $"Candidate index {selectedIndex} does not exist; the job has {candidates.Count} candidates");
+
+        var selectedCandidateJson = candidates[selectedIndex];
+        PlanningJobRequestPayload? request;
+        IReadOnlyList<CandidatePlacementPayload>? placements;
         try
         {
-            var draft = new Draft
+            request = JsonSerializer.Deserialize<PlanningJobRequestPayload>(planningJob.RequestPayload, JsonOptions);
+            placements = JsonSerializer.Deserialize<CandidatePayload>(selectedCandidateJson, JsonOptions)?.TaskPlacements;
+        }
+        catch (JsonException exception)
+        {
+            return Conflict("Candidate", "CANDIDATE_UNREADABLE", selectedIndex.ToString(),
+                $"The planning request or selected candidate could not be read: {exception.Message}");
+        }
+
+        var assetIds = request?.AssetIds?.Where(id => !string.IsNullOrWhiteSpace(id)).Select(id => id!).ToArray();
+        if (assetIds is null || assetIds.Length == 0 || string.IsNullOrWhiteSpace(request!.WindowId))
+            return Conflict("PlanningJob", "PLANNING_REQUEST_INCOMPLETE", planningJobId.ToString(),
+                "The planning request has no asset scope or maintenance window to revalidate against");
+
+        if (placements is null || placements.Count == 0)
+            return Conflict("Candidate", "CANDIDATE_HAS_NO_TASKS", selectedIndex.ToString(),
+                "The selected candidate has no task placements to approve");
+
+        Draft? replacedDraft = null;
+        if (planningJob.OriginalJobId is { } originalJobId)
+        {
+            replacedDraft = await dbContext.Drafts
+                .Include(d => d.Reservations)
+                .FirstOrDefaultAsync(
+                    d => d.PlanningJobId == originalJobId && d.Status == DraftStatus.Approved,
+                    cancellationToken);
+            if (replacedDraft is null)
+                return Conflict("PlanningJob", "NO_APPROVED_ORIGINAL_DRAFT", originalJobId.ToString(),
+                    "Original job has no approved draft; cannot create replacement");
+        }
+
+        // FR08: a replacement must not schedule again work completed on the draft it replaces. Read inside this
+        // transaction, so a task completed after V2 was planned rejects the now-stale V2.
+        IReadOnlyList<string> completedTaskIds = replacedDraft is null
+            ? []
+            : await dbContext.DraftTaskProgress
+                .Where(progress => progress.DraftId == replacedDraft.Id && progress.Status == TaskProgressStatus.Completed)
+                .Select(progress => progress.TaskId)
+                .ToListAsync(cancellationToken);
+
+        var validation = await candidateValidator.ValidateAsync(
+            new PlanningCandidateValidationRequest(
+                assetIds,
+                request.WindowId,
+                new PlanningCandidate(
+                    placements.Select(p => new PlanningTaskPlacement(p.TaskId, p.Start, p.End, p.TechnicianIds)).ToArray(),
+                    Rationale: string.Empty,
+                    EvidenceReferences: []))
+            {
+                CompletedTaskIds = completedTaskIds
+            },
+            cancellationToken);
+        var violations = validation.Violations
+            .Where(v => v.Code != PartUnavailableViolationCode)
+            .ToArray();
+        if (violations.Length > 0)
+            return Conflict("Candidate", "CANDIDATE_NO_LONGER_VALID", violations[0].Code,
+                "The selected candidate fails current validation: " +
+                string.Join("; ", violations.Select(v => $"{v.Code}: {v.Message}")));
+
+        // FR08: work in progress on the draft being replaced must continue in the replacement at its approved
+        // placement. Read inside this transaction, so a task started after V2 was planned rejects the stale V2.
+        IReadOnlyList<DraftTaskProgress> inProgressTasks = replacedDraft is null
+            ? []
+            : await dbContext.DraftTaskProgress
+                .AsNoTracking()
+                .Where(progress => progress.DraftId == replacedDraft.Id && progress.Status == TaskProgressStatus.InProgress)
+                .ToListAsync(cancellationToken);
+        var inProgressConflict = FindInProgressTaskNotPreserved(replacedDraft, inProgressTasks, placements);
+        if (inProgressConflict is not null)
+            return inProgressConflict;
+
+        var timeConflict = await FindTechnicianTimeConflictAsync(placements, replacedDraft?.Id, cancellationToken);
+        if (timeConflict is not null)
+            return timeConflict;
+
+        var draft = new Draft
+        {
+            Id = Guid.NewGuid(),
+            PlanningJobId = planningJobId,
+            Status = DraftStatus.Approved,
+            ApprovedAtUtc = DateTimeOffset.UtcNow,
+            ApprovedCandidatePayload = selectedCandidateJson
+        };
+
+        var stockConflict = await ReservePartsAsync(draft, placements, replacedDraft, cancellationToken);
+        if (stockConflict is not null)
+            return stockConflict;
+
+        if (replacedDraft is not null)
+            replacedDraft.Status = DraftStatus.Superseded;
+
+        await dbContext.Drafts.AddAsync(draft, cancellationToken);
+        // The in-progress work continues on the replacement with its status carried over
+        await dbContext.DraftTaskProgress.AddRangeAsync(
+            inProgressTasks.Select(progress => new DraftTaskProgress
             {
                 Id = Guid.NewGuid(),
-                PlanningJobId = planningJobId,
-                Status = DraftStatus.Pending
-            };
-            await dbContext.Drafts.AddAsync(draft, cancellationToken);
-
-            var reservations = new List<Reservation>();
-            foreach (var (partId, quantity) in requiredParts)
-            {
-                var reservation = new Reservation
+                DraftId = draft.Id,
+                TaskId = progress.TaskId,
+                Status = TaskProgressStatus.InProgress,
+                UpdatedAtUtc = progress.UpdatedAtUtc
+            }),
+            cancellationToken);
+        await dbContext.LockedTaskAssignments.AddRangeAsync(
+            placements
+                .Where(p => p.TechnicianIds.Count > 0)
+                .Select(p => new LockedTaskAssignment
                 {
                     Id = Guid.NewGuid(),
                     DraftId = draft.Id,
-                    SparePartId = partId,
-                    QuantityReserved = quantity,
-                    Status = ReservationStatus.Confirmed,
-                    ConfirmedAtUtc = DateTimeOffset.UtcNow
-                };
-                reservations.Add(reservation);
-                await dbContext.Reservations.AddAsync(reservation, cancellationToken);
-            }
+                    TaskId = p.TaskId,
+                    LockedTechnicianId = p.TechnicianIds[0],
+                    CreatedAtUtc = DateTimeOffset.UtcNow
+                }),
+            cancellationToken);
 
-            var allReservedForParts = await dbContext.Reservations
-                .Where(r => requiredParts.Keys.Contains(r.SparePartId) && r.Status == ReservationStatus.Confirmed)
-                .GroupBy(r => r.SparePartId)
-                .Select(g => new { PartId = g.Key, TotalReserved = g.Sum(r => r.QuantityReserved) })
-                .ToDictionaryAsync(g => g.PartId, g => g.TotalReserved, cancellationToken);
+        // FR09: recorded only when the approval is applied; an idempotent repeat returns earlier and records nothing
+        dbContext.RecordBusinessAction(
+            actor,
+            BusinessActions.Approved,
+            planningJobId,
+            draft.Id,
+            details: $"Approved alternative {selectedIndex + 1} of {candidates.Count}" +
+                     (replacedDraft is null
+                         ? "."
+                         : $"; superseded draft {replacedDraft.Id} of job {replacedDraft.PlanningJobId} and released its unused reservations."));
 
-            foreach (var (partId, _) in requiredParts)
-            {
-                var part = await dbContext.SpareParts.FirstOrDefaultAsync(
-                    p => p.Id == partId,
-                    cancellationToken);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return new DraftApprovalResult(true, draft.Id);
+    }
 
-                if (part is null)
-                {
-                    await transaction.RollbackAsync(cancellationToken);
-                    return new DraftApprovalResult(false,
-                        FailureReason: $"Spare part {partId} not found",
-                        ConflictData: new ApprovalConflictData("SparePart", "SPARE_PART_NOT_FOUND", partId));
-                }
+    /// <summary>
+    /// Rejects the approval if any technician in the new placements is already committed, in another currently
+    /// approved draft, to an overlapping interval (half-open: start &lt; otherEnd and otherStart &lt; end, compared
+    /// as instants). The draft being replaced is excluded so a revision can reuse its own time. An approved draft
+    /// whose snapshot cannot be read is treated as a conflict, because its commitments are unknown.
+    /// </summary>
+    private async Task<DraftApprovalResult?> FindTechnicianTimeConflictAsync(
+        IReadOnlyList<CandidatePlacementPayload> placements,
+        Guid? replacedDraftId,
+        CancellationToken cancellationToken)
+    {
+        var committedDrafts = await dbContext.Drafts
+            .AsNoTracking()
+            .Where(d => d.Status == DraftStatus.Approved && d.Id != replacedDraftId)
+            .Select(d => new { d.Id, d.ApprovedCandidatePayload })
+            .ToListAsync(cancellationToken);
 
-                var totalReserved = allReservedForParts.TryGetValue(partId, out var amount) ? amount : 0;
-                var newReservationQuantity = requiredParts[partId];
-                var totalWithNewReservation = totalReserved + newReservationQuantity;
-
-                if (totalWithNewReservation > part.OnHandQuantity)
-                {
-                    await transaction.RollbackAsync(cancellationToken);
-                    return new DraftApprovalResult(false,
-                        FailureReason: $"Insufficient inventory for {partId}",
-                        ConflictData: new ApprovalConflictData("SparePart", "INSUFFICIENT_INVENTORY", partId));
-                }
-
-                part.ReservedQuantity = totalWithNewReservation;
-            }
-
-            // Capture approved candidate snapshot
-            draft.ApprovedCandidatePayload = ExtractApprovedCandidate(planningJob.ResultPayload);
-
-            draft.Status = DraftStatus.Approved;
-            draft.ApprovedAtUtc = DateTimeOffset.UtcNow;
-
-            if (v1DraftIdToCleanup.HasValue)
-            {
-                var v1Draft = await dbContext.Drafts.FindAsync(new object[] { v1DraftIdToCleanup.Value }, cancellationToken: cancellationToken);
-                if (v1Draft is not null && v1Draft.Status == DraftStatus.Approved)
-                {
-                    v1Draft.Status = DraftStatus.Superseded;
-                }
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            await CreateLockedTaskAssignmentsAsync(draft.Id, planningJob, cancellationToken);
-
-            await transaction.CommitAsync(cancellationToken);
-
-            if (v1DraftIdToCleanup.HasValue)
-            {
-                try
-                {
-                    await CancelDraftAsync(v1DraftIdToCleanup.Value, cancellationToken);
-                }
-                catch
-                {
-                    // V2 is already committed, cleanup failure is not critical
-                    // Log would go here, but don't fail the approval
-                }
-            }
-
-            return new DraftApprovalResult(true, draft.Id);
-        }
-        catch (DbUpdateException dex) when (
-            dex.InnerException != null &&
-            dex.InnerException.GetType().Name == "SqliteException" &&
-            dex.Message.Contains("UNIQUE"))
+        foreach (var committedDraft in committedDrafts.OrderBy(d => d.Id))
         {
-            await transaction.RollbackAsync(cancellationToken);
-            var reloadedDraft = await dbContext.Drafts.FirstOrDefaultAsync(
-                d => d.PlanningJobId == planningJobId,
-                cancellationToken);
+            if (!TryReadCommittedPlacements(committedDraft.ApprovedCandidatePayload, out var committedPlacements))
+                return Conflict("Draft", "APPROVED_SNAPSHOT_UNAVAILABLE", committedDraft.Id.ToString(),
+                    $"Approved draft {committedDraft.Id} has no readable approved-plan snapshot, so its technician " +
+                    "commitments cannot be checked; resolve that draft before approving overlapping work");
 
-            if (reloadedDraft is not null && reloadedDraft.Status == DraftStatus.Approved)
+            foreach (var placement in placements)
+            foreach (var technicianId in placement.TechnicianIds)
             {
-                return new DraftApprovalResult(true, reloadedDraft.Id);
+                var overlapping = committedPlacements.FirstOrDefault(committed =>
+                    committed.TechnicianIds.Contains(technicianId, StringComparer.OrdinalIgnoreCase) &&
+                    placement.Start < committed.End &&
+                    committed.Start < placement.End);
+                if (overlapping is not null)
+                    return Conflict("Technician", "TECHNICIAN_TIME_CONFLICT", technicianId,
+                        $"Technician {technicianId} is assigned to task {placement.TaskId} " +
+                        $"[{placement.Start:O}, {placement.End:O}), which overlaps task {overlapping.TaskId} " +
+                        $"[{overlapping.Start:O}, {overlapping.End:O}) in approved draft {committedDraft.Id}");
             }
+        }
 
-            return new DraftApprovalResult(false,
-                FailureReason: "Concurrent draft creation detected",
-                ConflictData: new ApprovalConflictData("Draft", "CONCURRENT_DRAFT_CREATION", planningJobId.ToString()));
-        }
-        catch (DbUpdateConcurrencyException)
+        return null;
+    }
+
+    /// <summary>
+    /// FR08: each task in progress on the draft being replaced must appear in the replacement exactly once, at its
+    /// approved placement (same start, end and crew); otherwise the replacement is stale, or would drop or redo work
+    /// that has started.
+    /// </summary>
+    private static DraftApprovalResult? FindInProgressTaskNotPreserved(
+        Draft? replacedDraft,
+        IReadOnlyList<DraftTaskProgress> inProgressTasks,
+        IReadOnlyList<CandidatePlacementPayload> placements)
+    {
+        if (replacedDraft is null || inProgressTasks.Count == 0)
+            return null;
+
+        TryReadCommittedPlacements(replacedDraft.ApprovedCandidatePayload, out var approvedPlacements);
+        foreach (var progress in inProgressTasks)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            var draftId = existingDraft?.Id.ToString() ?? "unknown";
-            return new DraftApprovalResult(false,
-                FailureReason: "Concurrent modification detected",
-                ConflictData: new ApprovalConflictData("Draft", "CONCURRENT_MODIFICATION", draftId));
+            var approved = approvedPlacements.FirstOrDefault(placement =>
+                string.Equals(placement.TaskId, progress.TaskId, StringComparison.OrdinalIgnoreCase));
+            var replacement = placements
+                .Where(placement => string.Equals(placement.TaskId, progress.TaskId, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (approved is null ||
+                replacement.Count != 1 ||
+                replacement[0].Start != approved.Start ||
+                replacement[0].End != approved.End ||
+                !replacement[0].TechnicianIds.SequenceEqual(approved.TechnicianIds, StringComparer.OrdinalIgnoreCase))
+            {
+                return Conflict("Candidate", "CANDIDATE_NO_LONGER_VALID", "IN_PROGRESS_TASK_NOT_PRESERVED",
+                    $"Task {progress.TaskId} is in progress on the approved plan being replaced; the replacement must " +
+                    "keep it at its approved placement (same times and crew)");
+            }
         }
-        catch
+
+        return null;
+    }
+
+    private static bool TryReadCommittedPlacements(
+        string? snapshot,
+        out IReadOnlyList<CandidatePlacementPayload> placements)
+    {
+        placements = [];
+        if (string.IsNullOrWhiteSpace(snapshot))
+            return false;
+
+        try
         {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
+            var read = JsonSerializer.Deserialize<CandidatePayload>(snapshot, JsonOptions)?.TaskPlacements;
+            if (read is null || read.Any(p => p is null || p.TechnicianIds is null))
+                return false;
+
+            placements = read;
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
         }
     }
 
-    public async Task<DraftApprovalResult> ApproveDraftReplacementAsync(
-        Guid planningJobId,
+    /// <summary>
+    /// Adds the new draft's reservations, cancels the replaced draft's unused reservations and recomputes
+    /// SparePart.ReservedQuantity as the total of confirmed reservations. Completed (consumed) reservations of
+    /// the replaced draft are not released. Returns a conflict without changing anything if stock is short.
+    /// </summary>
+    private async Task<DraftApprovalResult?> ReservePartsAsync(
+        Draft draft,
+        IReadOnlyList<CandidatePlacementPayload> placements,
+        Draft? replacedDraft,
         CancellationToken cancellationToken)
     {
-        var planningJob = await dbContext.PlanningJobs.FirstOrDefaultAsync(
-            j => j.Id == planningJobId,
-            cancellationToken);
+        var placedTaskIds = placements.Select(p => p.TaskId).ToArray();
+        var placedTasks = await dbContext.MaintenanceTaskDefinitions
+            .AsNoTracking()
+            .Where(t => placedTaskIds.Contains(t.Id))
+            .ToListAsync(cancellationToken);
+        var requiredParts = placedTasks
+            .Where(t => t.RequiredPartId is not null && t.RequiredPartQuantity > 0)
+            .GroupBy(t => t.RequiredPartId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Sum(t => t.RequiredPartQuantity), StringComparer.OrdinalIgnoreCase);
 
-        if (planningJob is null)
-            return new DraftApprovalResult(false,
-                FailureReason: "Planning job not found",
-                ConflictData: new ApprovalConflictData("PlanningJob", "PLANNING_JOB_NOT_FOUND", planningJobId.ToString()));
+        var releasedReservations = replacedDraft?.Reservations
+            .Where(r => r.Status == ReservationStatus.Confirmed && r.CompletedAtUtc is null)
+            .ToList() ?? [];
+        var releasedReservationIds = releasedReservations.Select(r => r.Id).ToHashSet();
 
-        if (string.IsNullOrEmpty(planningJob.ResultPayload))
-            return new DraftApprovalResult(false,
-                FailureReason: "Planning job has no result",
-                ConflictData: new ApprovalConflictData("PlanningJob", "PLANNING_JOB_NO_RESULT", planningJobId.ToString()));
+        var affectedPartIds = requiredParts.Keys
+            .Concat(releasedReservations.Select(r => r.SparePartId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var retainedConfirmed = (await dbContext.Reservations
+                .AsNoTracking()
+                .Where(r => affectedPartIds.Contains(r.SparePartId) && r.Status == ReservationStatus.Confirmed)
+                .Select(r => new { r.Id, r.SparePartId, r.QuantityReserved })
+                .ToListAsync(cancellationToken))
+            .Where(r => !releasedReservationIds.Contains(r.Id))
+            .GroupBy(r => r.SparePartId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Sum(r => r.QuantityReserved), StringComparer.OrdinalIgnoreCase);
 
-        Guid? v1DraftIdToCleanup = null;
-        if (planningJob.OriginalJobId.HasValue)
+        var parts = new List<SparePart>(affectedPartIds.Length);
+        foreach (var partId in affectedPartIds)
         {
-            var v1Draft = await GetApprovedDraftForJobAsync(planningJob.OriginalJobId.Value, cancellationToken);
-            if (v1Draft is not null)
-            {
-                v1DraftIdToCleanup = v1Draft.Id;
-            }
+            var part = await dbContext.SpareParts.FirstOrDefaultAsync(p => p.Id == partId, cancellationToken);
+            if (part is null)
+                return Conflict("SparePart", "SPARE_PART_NOT_FOUND", partId, $"Spare part {partId} not found");
+
+            var required = requiredParts.GetValueOrDefault(partId);
+            if (retainedConfirmed.GetValueOrDefault(partId) + required > part.OnHandQuantity)
+                return Conflict("SparePart", "INSUFFICIENT_INVENTORY", partId, $"Insufficient inventory for {partId}");
+
+            parts.Add(part);
         }
 
-        var requiredParts = await ExtractRequiredPartsAsync(planningJob, cancellationToken);
-        if (requiredParts.Count == 0)
-            return new DraftApprovalResult(false,
-                FailureReason: "Planning job has no required parts",
-                ConflictData: new ApprovalConflictData("PlanningJob", "PLANNING_JOB_NO_PARTS", planningJobId.ToString()));
+        foreach (var reservation in releasedReservations)
+            reservation.Status = ReservationStatus.Cancelled;
 
-        using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
-        try
+        foreach (var (partId, quantity) in requiredParts)
         {
-            var draft = new Draft
+            draft.Reservations.Add(new Reservation
             {
                 Id = Guid.NewGuid(),
-                PlanningJobId = planningJobId,
-                Status = DraftStatus.Pending
-            };
-            await dbContext.Drafts.AddAsync(draft, cancellationToken);
-
-            var reservations = new List<Reservation>();
-            foreach (var (partId, quantity) in requiredParts)
-            {
-                var reservation = new Reservation
-                {
-                    Id = Guid.NewGuid(),
-                    DraftId = draft.Id,
-                    SparePartId = partId,
-                    QuantityReserved = quantity,
-                    Status = ReservationStatus.Confirmed,
-                    ConfirmedAtUtc = DateTimeOffset.UtcNow
-                };
-                reservations.Add(reservation);
-                await dbContext.Reservations.AddAsync(reservation, cancellationToken);
-            }
-
-            var allReservedForParts = await dbContext.Reservations
-                .Where(r => requiredParts.Keys.Contains(r.SparePartId) && r.Status == ReservationStatus.Confirmed)
-                .GroupBy(r => r.SparePartId)
-                .Select(g => new { PartId = g.Key, TotalReserved = g.Sum(r => r.QuantityReserved) })
-                .ToDictionaryAsync(g => g.PartId, g => g.TotalReserved, cancellationToken);
-
-            foreach (var (partId, _) in requiredParts)
-            {
-                var part = await dbContext.SpareParts.FirstOrDefaultAsync(
-                    p => p.Id == partId,
-                    cancellationToken);
-
-                if (part is null)
-                {
-                    await transaction.RollbackAsync(cancellationToken);
-                    return new DraftApprovalResult(false,
-                        FailureReason: $"Spare part {partId} not found",
-                        ConflictData: new ApprovalConflictData("SparePart", "SPARE_PART_NOT_FOUND", partId));
-                }
-
-                var totalReserved = allReservedForParts.TryGetValue(partId, out var amount) ? amount : 0;
-                var newReservationQuantity = requiredParts[partId];
-                var totalWithNewReservation = totalReserved + newReservationQuantity;
-
-                // DIAGNOSTIC LOGGING - ApproveDraftReplacementAsync
-                var comparisonResult = totalWithNewReservation > part.OnHandQuantity;
-                Console.WriteLine($"[INVENTORY_DIAGNOSTIC] JobId={planningJobId}|Method=ApproveDraftReplacementAsync|PartId={partId}|OnHand={part.OnHandQuantity}|Reserved={part.ReservedQuantity}|totalReserved={totalReserved}|newQty={newReservationQuantity}|total={totalWithNewReservation}|Exceeds={comparisonResult}");
-
-                if (comparisonResult)
-                {
-                    await transaction.RollbackAsync(cancellationToken);
-                    return new DraftApprovalResult(false,
-                        FailureReason: $"Insufficient inventory for {partId}",
-                        ConflictData: new ApprovalConflictData("SparePart", "INSUFFICIENT_INVENTORY", partId));
-                }
-
-                part.ReservedQuantity = totalWithNewReservation;
-            }
-
-            // Capture approved candidate snapshot
-            draft.ApprovedCandidatePayload = ExtractApprovedCandidate(planningJob.ResultPayload);
-
-            draft.Status = DraftStatus.Approved;
-            draft.ApprovedAtUtc = DateTimeOffset.UtcNow;
-
-            if (v1DraftIdToCleanup.HasValue)
-            {
-                var v1Draft = await dbContext.Drafts.FindAsync(new object[] { v1DraftIdToCleanup.Value }, cancellationToken: cancellationToken);
-                if (v1Draft is not null && v1Draft.Status == DraftStatus.Approved)
-                {
-                    v1Draft.Status = DraftStatus.Superseded;
-                }
-            }
-
-            await dbContext.SaveChangesAsync(cancellationToken);
-
-            await CreateLockedTaskAssignmentsAsync(draft.Id, planningJob, cancellationToken);
-
-            await transaction.CommitAsync(cancellationToken);
-
-            if (v1DraftIdToCleanup.HasValue)
-            {
-                try
-                {
-                    await CancelDraftAsync(v1DraftIdToCleanup.Value, cancellationToken);
-                }
-                catch
-                {
-                    // V2 is already committed, cleanup failure is not critical
-                }
-            }
-
-            return new DraftApprovalResult(true, draft.Id);
+                DraftId = draft.Id,
+                SparePartId = partId,
+                QuantityReserved = quantity,
+                Status = ReservationStatus.Confirmed,
+                ConfirmedAtUtc = DateTimeOffset.UtcNow
+            });
         }
-        catch (DbUpdateException dex) when (
-            dex.InnerException != null &&
-            dex.InnerException.GetType().Name == "SqliteException" &&
-            dex.Message.Contains("UNIQUE"))
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            var reloadedDraft = await dbContext.Drafts.FirstOrDefaultAsync(
-                d => d.PlanningJobId == planningJobId,
-                cancellationToken);
 
-            if (reloadedDraft is not null && reloadedDraft.Status == DraftStatus.Approved)
-            {
-                return new DraftApprovalResult(true, reloadedDraft.Id);
-            }
+        foreach (var part in parts)
+            part.ReservedQuantity = retainedConfirmed.GetValueOrDefault(part.Id) + requiredParts.GetValueOrDefault(part.Id);
 
-            return new DraftApprovalResult(false,
-                FailureReason: "Concurrent draft creation detected",
-                ConflictData: new ApprovalConflictData("Draft", "CONCURRENT_DRAFT_CREATION", planningJobId.ToString()));
-        }
-        catch (DbUpdateConcurrencyException)
+        return null;
+    }
+
+    private static DraftApprovalResult ExistingDraftResult(
+        Draft existingDraft,
+        int? candidateIndex,
+        IReadOnlyList<string> candidates)
+    {
+        switch (existingDraft.Status)
         {
-            await transaction.RollbackAsync(cancellationToken);
-            return new DraftApprovalResult(false,
-                FailureReason: "Concurrent modification detected",
-                ConflictData: new ApprovalConflictData("Draft", "CONCURRENT_MODIFICATION", "unknown"));
-        }
-        catch
-        {
-            await transaction.RollbackAsync(cancellationToken);
-            throw;
+            case DraftStatus.Approved:
+                // A repeated request is idempotent only if it asks for the candidate that was approved.
+                if (candidateIndex is { } index &&
+                    (index < 0 || index >= candidates.Count || candidates[index] != existingDraft.ApprovedCandidatePayload))
+                {
+                    return Conflict("Candidate", "CANDIDATE_SELECTION_MISMATCH", existingDraft.Id.ToString(),
+                        "This planning job was already approved with a different candidate");
+                }
+
+                return new DraftApprovalResult(true, existingDraft.Id);
+            case DraftStatus.Cancelled:
+                return Conflict("Draft", "DRAFT_CANCELLED", existingDraft.Id.ToString(),
+                    "Draft was cancelled and cannot be re-approved");
+            case DraftStatus.Superseded:
+                return Conflict("Draft", "DRAFT_SUPERSEDED", existingDraft.Id.ToString(),
+                    "Draft was superseded by a newer approved revision and cannot be re-approved");
+            default:
+                return Conflict("Draft", "INVALID_DRAFT_STATE", existingDraft.Id.ToString(),
+                    $"Draft is in state {existingDraft.Status} and cannot be approved");
         }
     }
 
@@ -366,27 +492,35 @@ public sealed class DraftApprovalService(
         Guid draftId,
         CancellationToken cancellationToken)
     {
-        var draft = await dbContext.Drafts
-            .Include(d => d.Reservations)
-            .FirstOrDefaultAsync(d => d.Id == draftId, cancellationToken);
-
-        if (draft is null)
-            return new CancellationResult(false, "Draft not found");
-
-        if (draft.Status == DraftStatus.Cancelled)
-            return new CancellationResult(true); // Idempotent: already cancelled
-
-        if (draft.Status != DraftStatus.Approved)
-            return new CancellationResult(false,
-                "Draft is not in approved state",
-                ConflictData: new ApprovalConflictData("Draft", "INVALID_DRAFT_STATE", draftId.ToString()));
+        // As in approval, decide from committed rows only: the transaction begins (taking SQLite's write lock)
+        // before the draft is read, so an approval that superseded this draft cannot commit between the status
+        // check and the writes, and no stale tracked draft, reservation or part state is reused.
+        if (dbContext.ChangeTracker.HasChanges())
+            throw new InvalidOperationException("Cancellation cannot run while the DbContext has unsaved changes.");
+        dbContext.ChangeTracker.Clear();
 
         using var transaction = await dbContext.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            // Get all confirmed reservations for this draft
+            var draft = await dbContext.Drafts
+                .Include(d => d.Reservations)
+                .FirstOrDefaultAsync(d => d.Id == draftId, cancellationToken);
+
+            if (draft is null)
+                return new CancellationResult(false, "Draft not found");
+
+            if (draft.Status == DraftStatus.Cancelled)
+                return new CancellationResult(true); // Idempotent: already cancelled
+
+            if (draft.Status != DraftStatus.Approved)
+                return new CancellationResult(false,
+                    "Draft is not in approved state",
+                    ConflictData: new ApprovalConflictData("Draft", "INVALID_DRAFT_STATE", draftId.ToString()));
+
+            // FR08: release only unused reservations. Completed (consumed) reservations stay Confirmed with their
+            // CompletedAtUtc and keep counting towards ReservedQuantity, as in replacement (ReservePartsAsync).
             var confirmedReservations = draft.Reservations
-                .Where(r => r.Status == ReservationStatus.Confirmed)
+                .Where(r => r.Status == ReservationStatus.Confirmed && r.CompletedAtUtc is null)
                 .ToList();
 
             // Release inventory by updating SparePart.ReservedQuantity
@@ -422,6 +556,13 @@ public sealed class DraftApprovalService(
             // Mark draft as cancelled
             draft.Status = DraftStatus.Cancelled;
 
+            dbContext.RecordBusinessAction(
+                actor,
+                BusinessActions.Cancelled,
+                draft.PlanningJobId,
+                draft.Id,
+                details: $"Released {confirmedReservations.Count} unused reservation(s).");
+
             await dbContext.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
 
@@ -454,157 +595,53 @@ public sealed class DraftApprovalService(
         return draft;
     }
 
-    private async Task<Dictionary<string, decimal>> ExtractRequiredPartsAsync(
-        PlanningJob job,
-        CancellationToken cancellationToken)
+    /// <summary>Reads the outcome and the raw JSON of each candidate; false when the payload is not readable JSON.</summary>
+    private static bool TryReadCandidates(
+        string resultPayload,
+        out string? outcome,
+        out IReadOnlyList<string> candidates)
     {
+        outcome = null;
+        candidates = [];
         try
         {
-            if (string.IsNullOrEmpty(job.ResultPayload))
-                return [];
+            using var document = JsonDocument.Parse(resultPayload);
+            var root = document.RootElement;
+            if (root.ValueKind != JsonValueKind.Object)
+                return false;
 
-            using var doc = JsonDocument.Parse(job.ResultPayload);
-            var root = doc.RootElement;
-
-            if (!root.TryGetProperty("outcome", out var outcomeElement) ||
-                outcomeElement.GetString() != "CandidatesGenerated")
-                return [];
-
-            if (!root.TryGetProperty("result", out var resultElement))
-                return [];
-
-            var requiredParts = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
-
-            if (resultElement.TryGetProperty("candidates", out var candidatesElement) &&
+            outcome = root.TryGetProperty("outcome", out var outcomeElement) &&
+                      outcomeElement.ValueKind == JsonValueKind.String
+                ? outcomeElement.GetString()
+                : null;
+            if (root.TryGetProperty("result", out var resultElement) &&
+                resultElement.ValueKind == JsonValueKind.Object &&
+                resultElement.TryGetProperty("candidates", out var candidatesElement) &&
                 candidatesElement.ValueKind == JsonValueKind.Array)
             {
-                var firstCandidate = candidatesElement.EnumerateArray().FirstOrDefault();
-                if (firstCandidate.ValueKind != JsonValueKind.Undefined &&
-                    firstCandidate.TryGetProperty("requestedTaskIds", out var taskIdsElement) &&
-                    taskIdsElement.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (var taskIdElement in taskIdsElement.EnumerateArray())
-                    {
-                        var taskId = taskIdElement.GetString();
-                        if (!string.IsNullOrEmpty(taskId))
-                        {
-                            var task = await dbContext.MaintenanceTaskDefinitions
-                                .FirstOrDefaultAsync(t => t.Id == taskId, cancellationToken);
-
-                            if (task?.RequiredPartId is not null)
-                            {
-                                if (requiredParts.ContainsKey(task.RequiredPartId))
-                                    requiredParts[task.RequiredPartId] += task.RequiredPartQuantity;
-                                else
-                                    requiredParts[task.RequiredPartId] = task.RequiredPartQuantity;
-                            }
-                        }
-                    }
-                }
+                candidates = candidatesElement.EnumerateArray().Select(c => c.GetRawText()).ToArray();
             }
 
-            return requiredParts;
-        }
-        catch
-        {
-            return [];
-        }
-    }
-
-    private async Task CreateLockedTaskAssignmentsAsync(
-        Guid draftId,
-        PlanningJob planningJob,
-        CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrEmpty(planningJob.ResultPayload))
-            return;
-
-        JsonDocument document;
-        try
-        {
-            document = JsonDocument.Parse(planningJob.ResultPayload);
+            return true;
         }
         catch (JsonException)
         {
-            // Silently ignore malformed JSON; no locks can be created from invalid result
-            return;
-        }
-
-        using (document)
-        {
-            var rootElement = document.RootElement;
-
-            if (!rootElement.TryGetProperty("result", out var resultElement))
-                return;
-
-            if (!resultElement.TryGetProperty("candidates", out var candidatesElement) ||
-                candidatesElement.ValueKind != JsonValueKind.Array ||
-                candidatesElement.GetArrayLength() == 0)
-                return;
-
-            var firstCandidate = candidatesElement[0];
-            if (!firstCandidate.TryGetProperty("taskPlacements", out var placementsElement) ||
-                placementsElement.ValueKind != JsonValueKind.Array)
-                return;
-
-            var locksToCreate = new List<Domain.Entities.LockedTaskAssignment>();
-            foreach (var placementElement in placementsElement.EnumerateArray())
-            {
-                if (placementElement.TryGetProperty("taskId", out var taskIdElement) &&
-                    placementElement.TryGetProperty("technicianIds", out var technicianIdsElement) &&
-                    technicianIdsElement.ValueKind == JsonValueKind.Array &&
-                    technicianIdsElement.GetArrayLength() > 0)
-                {
-                    var taskId = taskIdElement.GetString();
-                    var firstTechnicianId = technicianIdsElement[0].GetString();
-
-                    if (!string.IsNullOrEmpty(taskId) && !string.IsNullOrEmpty(firstTechnicianId))
-                    {
-                        locksToCreate.Add(new Domain.Entities.LockedTaskAssignment
-                        {
-                            Id = Guid.NewGuid(),
-                            DraftId = draftId,
-                            TaskId = taskId,
-                            LockedTechnicianId = firstTechnicianId,
-                            CreatedAtUtc = DateTimeOffset.UtcNow
-                        });
-                    }
-                }
-            }
-
-            if (locksToCreate.Count > 0)
-            {
-                await dbContext.LockedTaskAssignments.AddRangeAsync(locksToCreate, cancellationToken);
-                await dbContext.SaveChangesAsync(cancellationToken);
-            }
+            return false;
         }
     }
 
-    private string? ExtractApprovedCandidate(string? resultPayload)
-    {
-        if (string.IsNullOrEmpty(resultPayload))
-            return null;
+    private static bool IsUniqueConstraintViolation(DbUpdateException exception) =>
+        exception.InnerException?.GetType().Name == "SqliteException" &&
+        exception.InnerException.Message.Contains("UNIQUE", StringComparison.OrdinalIgnoreCase);
 
-        try
-        {
-            using var doc = JsonDocument.Parse(resultPayload);
-            var root = doc.RootElement;
+    private static DraftApprovalResult Conflict(string resourceType, string reason, string? resourceId, string message) =>
+        new(false, FailureReason: message, ConflictData: new ApprovalConflictData(resourceType, reason, resourceId));
 
-            // Try to extract candidates[0] from result object
-            if (root.TryGetProperty("result", out var resultElement) &&
-                resultElement.TryGetProperty("candidates", out var candidatesElement) &&
-                candidatesElement.ValueKind == JsonValueKind.Array &&
-                candidatesElement.GetArrayLength() > 0)
-            {
-                return candidatesElement[0].GetRawText();
-            }
+    private sealed record CandidatePayload(IReadOnlyList<CandidatePlacementPayload>? TaskPlacements);
 
-            // Fallback: if no candidates found, return entire resultPayload
-            return resultPayload;
-        }
-        catch
-        {
-            return null;
-        }
-    }
+    private sealed record CandidatePlacementPayload(
+        string TaskId,
+        DateTimeOffset Start,
+        DateTimeOffset End,
+        IReadOnlyList<string> TechnicianIds);
 }

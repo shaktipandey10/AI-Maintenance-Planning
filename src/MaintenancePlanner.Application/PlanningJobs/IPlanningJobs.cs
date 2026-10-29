@@ -35,6 +35,16 @@ public interface IPlanningJobs
         bool isTransient,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken);
+    /// <summary>
+    /// Returns a job this lease still owns to the queue without consuming the attempt its claim counted,
+    /// for example when the worker stops gracefully. Has no effect if the job was reclaimed, completed,
+    /// failed or otherwise changed since the caller's version.
+    /// </summary>
+    Task<bool> ReleaseAsync(
+        Guid jobId,
+        Guid leaseToken,
+        int expectedVersion,
+        CancellationToken cancellationToken);
     Task<bool> SaveCheckpointAsync(
         Guid jobId,
         Guid leaseToken,

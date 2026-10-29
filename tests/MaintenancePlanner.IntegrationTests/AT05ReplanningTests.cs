@@ -24,7 +24,7 @@ public sealed class AT05ReplanningTests
 
         await using (var dbContext = fixture.CreateDbContext())
         {
-            await CreatePlanningJobWithTaskPlacementsAsync(dbContext, jobId, ["TECH-001", "TECH-002"]);
+            await CreatePlanningJobWithTaskPlacementsAsync(dbContext, jobId);
         }
 
         var approvalService = fixture.ServiceProvider.GetRequiredService<IDraftApprovalService>();
@@ -55,7 +55,7 @@ public sealed class AT05ReplanningTests
         // First approval
         await using (var dbContext = fixture.CreateDbContext())
         {
-            await CreatePlanningJobWithTaskPlacementsAsync(dbContext, jobId, ["TECH-001"]);
+            await CreatePlanningJobWithTaskPlacementsAsync(dbContext, jobId);
         }
 
         var approvalService = fixture.ServiceProvider.GetRequiredService<IDraftApprovalService>();
@@ -99,7 +99,7 @@ public sealed class AT05ReplanningTests
 
         await using (var dbContext = fixture.CreateDbContext())
         {
-            await CreatePlanningJobWithTaskPlacementsAsync(dbContext, jobId, ["TECH-001"]);
+            await CreatePlanningJobWithTaskPlacementsAsync(dbContext, jobId);
         }
 
         var approvalService = fixture.ServiceProvider.GetRequiredService<IDraftApprovalService>();
@@ -130,51 +130,20 @@ public sealed class AT05ReplanningTests
         }
     }
 
-    private static async Task CreatePlanningJobWithTaskPlacementsAsync(
+    // Approval revalidates the candidate, so the job carries a schedulable P-101 plan in the baseline window:
+    // PREP -> TECH-001, BEARING-REPLACEMENT -> TECH-001 + TECH-002, VERIFICATION -> TECH-003.
+    // Locks take the first technician of each placement.
+    private static Task CreatePlanningJobWithTaskPlacementsAsync(
         MaintenancePlannerDbContext dbContext,
-        Guid jobId,
-        string[] technicianIds)
-    {
-        var placements = new[]
+        Guid jobId) =>
+        ApprovalTestSupport.AddSucceededJobAsync(dbContext, jobId, null, new
         {
-            new { taskId = "P101-PREP", technicianIds },
-            new { taskId = "P101-BEARING-REPLACEMENT", technicianIds },
-            new { taskId = "P101-VERIFICATION", technicianIds }
-        };
-
-        var result = new
-        {
-            outcome = "CandidatesGenerated",
-            result = new
-            {
-                candidates = new[]
-                {
-                    new
-                    {
-                        taskPlacements = placements,
-                        rationale = "Test candidate for AT05",
-                        evidenceReferences = new object[0],
-                        requestedTaskIds = new[] { "P101-PREP", "P101-BEARING-REPLACEMENT", "P101-VERIFICATION" },
-                        dependencyTaskIds = new object[0]
-                    }
-                }
-            }
-        };
-
-        var planningJob = new PlanningJob
-        {
-            Id = jobId,
-            OperationId = Guid.NewGuid(),
-            RequestPayload = """{"requestText":"Plan P-101 bearing replacement","assetIds":["P-101"]}""",
-            Status = PlanningJobStatus.Succeeded,
-            CreatedAtUtc = DateTimeOffset.UtcNow,
-            CompletedAtUtc = DateTimeOffset.UtcNow,
-            ResultPayload = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web))
-        };
-
-        await dbContext.PlanningJobs.AddAsync(planningJob);
-        await dbContext.SaveChangesAsync();
-    }
+            taskPlacements = ApprovalTestSupport.StableIdPlacements(),
+            rationale = "Test candidate for AT05",
+            evidenceReferences = Array.Empty<object>(),
+            requestedTaskIds = new[] { "P101-PREP", "P101-BEARING-REPLACEMENT", "P101-VERIFICATION" },
+            dependencyTaskIds = Array.Empty<string>()
+        });
 
     private sealed class ApprovalTestFixture : IAsyncDisposable
     {
@@ -214,7 +183,7 @@ public sealed class AT05ReplanningTests
             var builder = WebApplication.CreateBuilder();
             builder.Services.AddDbContext<MaintenancePlannerDbContext>(db =>
                 db.UseSqlite(connectionString));
-            builder.Services.AddScoped<IDraftApprovalService, DraftApprovalService>();
+            builder.Services.AddApprovalServices();
 
             var app = builder.Build();
 

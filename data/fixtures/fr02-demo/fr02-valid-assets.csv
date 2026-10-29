@@ -1,0 +1,3 @@
+id,plantId,name,model,priority
+DEMO-FR02-A01,PLANT-DEMO,FR02 Demo Pump A01,DEMO-PX-1,7
+DEMO-FR02-A02,PLANT-DEMO,FR02 Demo Fan A02,DEMO-FX-2,8

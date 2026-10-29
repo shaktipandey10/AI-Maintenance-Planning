@@ -1,0 +1,22 @@
+Manual Testing of Feedback 02 - 
+
+Alternatives selection 
+
+Planning 
+{
+  "requestText": "Create a maintenance plan for P-101 using the baseline Saturday 08:00-16:00 window. Include preparation, bearing replacement, and verification in dependency order. Generate feasible alternatives using actual technician availability and inventory. Do not assume unavailable spare parts are available.",
+  "assetIds": [
+    "p-101"
+  ],
+  "windowId": "MW-P101-BASELINE-20261024"
+}
+result infeasible - BR-101 is already reserved and avalibility = 0
+
+We have to update the DB - 
+Copy DB - backup set connection string to copy db.
+
+Old draft update
+
+Invoke-WebRequest -Method Post -Uri "http://localhost:5083/api/drafts/3286C0F9-00ED-4D0A-9E00-725AD27D494A/cancel" -UseBasicParsing | Select-Object StatusCode
+
+Invoke-RestMethod "http://localhost:5083/api/drafts/3286C0F9-00ED-4D0A-9E00-725AD27D494A" | Select-Object status     

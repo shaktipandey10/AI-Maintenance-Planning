@@ -175,6 +175,7 @@ public sealed class PlanningCandidateValidator(
         }
 
         var placements = taskPlacements;
+        var completedTaskIds = new HashSet<string>(request.CompletedTaskIds, StringComparer.OrdinalIgnoreCase);
         var placementsByTaskId = new Dictionary<string, PlanningTaskPlacement>(StringComparer.OrdinalIgnoreCase);
         var partRequirements = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
         var assignedTechniciansByPlacement = new List<(PlanningTaskPlacement Placement, string TechnicianId)>();
@@ -219,6 +220,15 @@ public sealed class PlanningCandidateValidator(
                     placement.TaskId,
                     placement.TaskId));
                 continue;
+            }
+
+            if (completedTaskIds.Contains(placement.TaskId))
+            {
+                violations.Add(new PlanningValidationViolation(
+                    "TASK_ALREADY_COMPLETED",
+                    $"Task {placement.TaskId} is already completed on the approved plan being replaced and cannot be scheduled again.",
+                    placement.TaskId,
+                    placement.TaskId));
             }
 
             if (!assetIds.Contains(task.AssetId, StringComparer.OrdinalIgnoreCase))
@@ -318,17 +328,20 @@ public sealed class PlanningCandidateValidator(
             }
         }
 
-        ValidatePredecessors(tasksById, placementsByTaskId, violations);
+        ValidatePredecessors(tasksById, placementsByTaskId, completedTaskIds, violations);
         ValidateTechnicianOverlaps(assignedTechniciansByPlacement, violations);
 
         foreach (var requirement in partRequirements)
         {
             var part = sparePartsById[requirement.Key];
-            if (part.AvailableQuantity < requirement.Value)
+            // A replacement may also use what the approved plan it replaces holds, since its approval releases that
+            var availableQuantity = part.AvailableQuantity + request.ReleasableReservedQuantities
+                .FirstOrDefault(entry => string.Equals(entry.Key, part.Id, StringComparison.OrdinalIgnoreCase)).Value;
+            if (availableQuantity < requirement.Value)
             {
                 violations.Add(new PlanningValidationViolation(
                     "PART_UNAVAILABLE",
-                    $"Spare part {part.Id} has {part.AvailableQuantity} available but {requirement.Value} is required across the candidate.",
+                    $"Spare part {part.Id} has {availableQuantity} available but {requirement.Value} is required across the candidate.",
                     TaskId: null,
                     ResourceId: part.Id));
             }
@@ -425,6 +438,7 @@ public sealed class PlanningCandidateValidator(
     private static void ValidatePredecessors(
         IReadOnlyDictionary<string, MaintenanceTaskReadModel> tasksById,
         IReadOnlyDictionary<string, PlanningTaskPlacement> placementsByTaskId,
+        IReadOnlySet<string> completedTaskIds,
         ICollection<PlanningValidationViolation> violations)
     {
         foreach (var (taskId, placement) in placementsByTaskId)
@@ -444,6 +458,10 @@ public sealed class PlanningCandidateValidator(
                     task.PredecessorTaskId));
                 continue;
             }
+
+            // A predecessor completed on the approved plan being replaced is already satisfied
+            if (completedTaskIds.Contains(task.PredecessorTaskId))
+                continue;
 
             if (!placementsByTaskId.TryGetValue(task.PredecessorTaskId, out var predecessorPlacement))
             {

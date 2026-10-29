@@ -89,11 +89,38 @@ describe('ApprovalScreen', () => {
       fireEvent.click(approveButton);
 
       await waitFor(() => {
-        expect(mockApiClient.apiClient.approveDraft).toHaveBeenCalledWith(mockJobId);
+        expect(mockApiClient.apiClient.approveDraft).toHaveBeenCalledWith(mockJobId, 0);
         expect(mockOnApprovalSuccess).toHaveBeenCalledWith(mockDraftId);
       });
 
       expect(localStorage.getItem(`draft_${mockJobId}`)).toBe(mockDraftId);
+    });
+
+    it('should send the selected second candidate index when approving', async () => {
+      const mockDraftId = 'draft-789';
+      mockApiClient.apiClient.approveDraft.mockResolvedValue({ draftId: mockDraftId });
+
+      render(
+        <ApprovalScreen
+          jobId={mockJobId}
+          candidate={mockCandidate}
+          candidateIndex={1}
+          interpretation={mockInterpretation}
+          onBack={mockOnBack}
+          onApprovalSuccess={mockOnApprovalSuccess}
+          onViewDraftDetail={mockOnViewDraftDetail}
+        />
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: /Approve Plan/i }));
+
+      await waitFor(() => {
+        expect(mockApiClient.apiClient.approveDraft).toHaveBeenCalledWith(mockJobId, 1);
+        expect(mockOnApprovalSuccess).toHaveBeenCalledWith(mockDraftId);
+      });
+
+      expect(mockApiClient.apiClient.approveDraft).toHaveBeenCalledTimes(1);
+      expect(localStorage.getItem(`approved_candidate_${mockJobId}`)).toBe('1');
     });
   });
 

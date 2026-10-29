@@ -1,0 +1,34 @@
+﻿# Stage 7 focused verification: remaining unit classes: workflow result mapping and early plan-progress model tests (no database)
+# Captured: 2026-10-29T15:03:56.1196601+05:30 to 2026-10-29T15:03:59.8704388+05:30
+# Repository HEAD: 1376af5 (working tree has uncommitted changes in src/tests/frontend: 29 paths; includes the AI03 work and a three-file test-fixture path fix)
+# Safeguards: process-scoped ConnectionStrings__MaintenancePlanner and ManualImports__Directory pointed at a temporary folder; Ollama__EnableTools=false; no API started; no Ollama call; the original maintenance-planner.db was not opened by this command.
+
+# Command
+dotnet test tests\MaintenancePlanner.UnitTests --no-build --nologo --filter "FullyQualifiedName~AT11PlanProgressTests|FullyQualifiedName~PlanningWorkflowResultMapperTests" --logger console;verbosity=normal
+# Exit code
+0
+# Captured output
+Test run for D:\repos\repos\ABB_AI_POC\AI-Maintanance-Planner\tests\MaintenancePlanner.UnitTests\bin\Debug\net10.0\MaintenancePlanner.UnitTests.dll (.NETCoreApp,Version=v10.0)
+A total of 1 test files matched the specified pattern.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v3.1.4+50e68bbb8b (64-bit .NET 10.0.8)
+[xUnit.net 00:00:00.20]   Discovering: MaintenancePlanner.UnitTests
+[xUnit.net 00:00:00.38]   Discovered:  MaintenancePlanner.UnitTests
+[xUnit.net 00:00:00.43]   Starting:    MaintenancePlanner.UnitTests
+  Passed MaintenancePlanner.UnitTests.AT11PlanProgressTests.AT11_CompletionTracking_RequiresNewProperty [8 ms]
+  Passed MaintenancePlanner.UnitTests.AT11PlanProgressTests.AT11_ExportFormat_RequiresPdfRepresentation [< 1 ms]
+  Passed MaintenancePlanner.UnitTests.AT11PlanProgressTests.AT11_ApprovedRevisionCanBeIdentified [5 ms]
+  Passed MaintenancePlanner.UnitTests.PlanningWorkflowResultMapperTests.FromScheduleResult_NonCandidateOutcomes_PreserveDetailedViolations(outcome: DataUnavailable, expectedResultType: typeof(MaintenancePlanner.Application.Planning.PlanningDataUnavailableResult)) [23 ms]
+  Passed MaintenancePlanner.UnitTests.PlanningWorkflowResultMapperTests.FromScheduleResult_NonCandidateOutcomes_PreserveDetailedViolations(outcome: InvalidInput, expectedResultType: typeof(MaintenancePlanner.Application.Planning.PlanningInvalidInputResult)) [< 1 ms]
+  Passed MaintenancePlanner.UnitTests.PlanningWorkflowResultMapperTests.FromScheduleResult_NonCandidateOutcomes_PreserveDetailedViolations(outcome: SearchLimitReached, expectedResultType: typeof(MaintenancePlanner.Application.Planning.PlanningSearchLimitReachedResult)) [< 1 ms]
+  Passed MaintenancePlanner.UnitTests.PlanningWorkflowResultMapperTests.FromScheduleResult_NonCandidateOutcomes_PreserveDetailedViolations(outcome: Infeasible, expectedResultType: typeof(MaintenancePlanner.Application.Planning.PlanningInfeasibleResult)) [< 1 ms]
+  Passed MaintenancePlanner.UnitTests.PlanningWorkflowResultMapperTests.FromScheduleResult_CandidatesGenerated_PreservesCandidateAndWorkflowDetails [3 ms]
+[xUnit.net 00:00:00.59]   Finished:    MaintenancePlanner.UnitTests
+  Passed MaintenancePlanner.UnitTests.AT11PlanProgressTests.AT11_PlanProgress_CalculatesRemainingWork [9 ms]
+  Passed MaintenancePlanner.UnitTests.PlanningWorkflowResultMapperTests.FromScheduleResult_ClarificationRequired_PreservesQuestionsAndContext [< 1 ms]
+  Passed MaintenancePlanner.UnitTests.AT11PlanProgressTests.AT11_ExportFormat_RequiresJsonRepresentation [< 1 ms]
+  Passed MaintenancePlanner.UnitTests.AT11PlanProgressTests.AT11_ReservationRepresentsTaskRequirements [6 ms]
+
+Test Run Successful.
+Total tests: 12
+     Passed: 12
+ Total time: 1.6876 Seconds

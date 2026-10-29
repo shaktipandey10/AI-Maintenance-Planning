@@ -1,0 +1,142 @@
+.import-screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #f8f9fa;
+}
+
+.import-screen .screen-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  background-color: #ffffff;
+  border-bottom: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.import-screen .screen-header h1 {
+  margin: 0;
+  font-size: 28px;
+  color: #212529;
+  flex: 1;
+  text-align: center;
+}
+
+.import-screen .btn-back {
+  background: none;
+  border: none;
+  font-size: 18px;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 4px;
+  color: #495057;
+  transition: background-color 0.2s;
+}
+
+.import-screen .btn-back:hover:not(:disabled) {
+  background-color: #e9ecef;
+}
+
+.import-screen .header-spacer {
+  width: 60px;
+}
+
+.import-screen .screen-content {
+  flex: 1;
+  padding: 20px;
+  max-width: 1000px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.import-screen .detail-section {
+  background-color: #ffffff;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.import-screen .detail-section h2 {
+  margin-top: 0;
+  margin-bottom: 16px;
+  font-size: 20px;
+  color: #212529;
+  border-bottom: 2px solid #e9ecef;
+  padding-bottom: 12px;
+}
+
+.import-screen .import-confirmation {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #f59e0b;
+  border-left-width: 3px;
+  border-radius: 6px;
+  background-color: #fffbeb;
+  color: #78350f;
+}
+
+.import-screen .import-confirmation p {
+  margin: 0 0 12px;
+}
+
+.import-screen .import-confirmation-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.import-screen .import-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.import-screen .import-summary div {
+  padding: 12px;
+  background-color: #f8f9fa;
+  border-radius: 6px;
+}
+
+.import-screen .import-summary dt {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6c757d;
+}
+
+.import-screen .import-summary dd {
+  margin: 4px 0 0;
+  font-weight: 600;
+  color: #212529;
+  overflow-wrap: anywhere;
+}
+
+.import-screen .import-note {
+  font-size: 0.85em;
+  color: #6c757d;
+}
+
+.import-screen .import-issues {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+  display: block;
+  overflow-x: auto;
+}
+
+.import-screen .import-issues th,
+.import-screen .import-issues td {
+  padding: 8px;
+  border-bottom: 1px solid #dee2e6;
+  text-align: left;
+  vertical-align: top;
+}
+
+.import-screen .import-issues th {
+  background-color: #f8f9fa;
+  color: #495057;
+}

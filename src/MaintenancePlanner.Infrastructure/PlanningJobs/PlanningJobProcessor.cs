@@ -2,8 +2,10 @@ using System.Text.Json;
 using MaintenancePlanner.Application.Locks;
 using MaintenancePlanner.Application.Planning;
 using MaintenancePlanner.Application.PlanningJobs;
+using MaintenancePlanner.Domain.Entities;
 using MaintenancePlanner.Infrastructure.Persistence;
 using MaintenancePlanner.Infrastructure.Planning;
+using Microsoft.EntityFrameworkCore;
 
 namespace MaintenancePlanner.Infrastructure.PlanningJobs;
 
@@ -79,37 +81,73 @@ public sealed class PlanningJobProcessor(
             }
         }
 
+        // FR08: tasks completed on the original job's approved draft are not scheduled again in its replacement.
+        // Unlike locks, a failure here is not ignored, since planning would then repeat completed work.
+        if (dbContext is not null)
+        {
+            var originalJobId = await dbContext.PlanningJobs
+                .Where(planningJob => planningJob.Id == jobId)
+                .Select(planningJob => planningJob.OriginalJobId)
+                .SingleOrDefaultAsync(cancellationToken);
+            if (originalJobId is { } replacedJobId)
+            {
+                var completedTaskIds = await dbContext.Drafts
+                    .Where(draft => draft.PlanningJobId == replacedJobId && draft.Status == DraftStatus.Approved)
+                    .Join(dbContext.DraftTaskProgress, draft => draft.Id, progress => progress.DraftId, (_, progress) => progress)
+                    .Where(progress => progress.Status == TaskProgressStatus.Completed)
+                    .Select(progress => progress.TaskId)
+                    .ToArrayAsync(cancellationToken);
+
+                // FR07: the replacement may plan with the parts the replaced draft holds unconsumed, because approving
+                // the replacement releases exactly those reservations (DraftApprovalService.ReservePartsAsync). Only
+                // read here: nothing is released until that approval commits.
+                var releasableReservations = await dbContext.Drafts
+                    .Where(draft => draft.PlanningJobId == replacedJobId && draft.Status == DraftStatus.Approved)
+                    .SelectMany(draft => draft.Reservations)
+                    .Where(reservation => reservation.Status == ReservationStatus.Confirmed && reservation.CompletedAtUtc == null)
+                    .Select(reservation => new { reservation.SparePartId, reservation.QuantityReserved })
+                    .ToListAsync(cancellationToken);
+                // FR08: tasks in progress on the replaced draft keep their approved placement in the replacement
+                var inProgressPlacements = await ReadInProgressPlacementsAsync(replacedJobId, cancellationToken);
+
+                request = request with
+                {
+                    CompletedTaskIds = completedTaskIds,
+                    InProgressPlacements = inProgressPlacements,
+                    ReleasableReservedQuantities = releasableReservations
+                        .GroupBy(reservation => reservation.SparePartId, StringComparer.OrdinalIgnoreCase)
+                        .ToDictionary(
+                            group => group.Key,
+                            group => group.Sum(reservation => reservation.QuantityReserved),
+                            StringComparer.OrdinalIgnoreCase)
+                };
+            }
+        }
+
         PlanningWorkflowResult result;
         try
         {
-            // Check if we have a checkpoint to resume from
-            if (!string.IsNullOrEmpty(job.CheckpointPayload))
+            if (string.IsNullOrEmpty(job.CheckpointPayload))
             {
-                var checkpoint = JsonSerializer.Deserialize<PlanningJobInterpretationCheckpoint>(
-                    job.CheckpointPayload,
-                    JsonOptions);
-                if (checkpoint is not null)
-                {
-                    var interpretationJson = JsonSerializer.Deserialize<PlanningInterpretation>(
-                        checkpoint.InterpretationPayload,
-                        JsonOptions);
-                    if (interpretationJson is not null)
-                    {
-                        result = await workflow.ResumeFromCheckpointAsync(request, interpretationJson, cancellationToken, locks);
-                    }
-                    else
-                    {
-                        result = await workflow.ExecuteAsync(request, cancellationToken, locks);
-                    }
-                }
-                else
-                {
-                    result = await workflow.ExecuteAsync(request, cancellationToken, locks);
-                }
+                result = await workflow.ExecuteAsync(request, cancellationToken, locks);
             }
             else
             {
-                result = await workflow.ExecuteAsync(request, cancellationToken, locks);
+                // A checkpoint is only used once validated for this job and request. An unusable one fails the job
+                // permanently instead of being retried or silently ignored.
+                if (!PlanningInterpretationCheckpoint.TryRead(
+                        job.CheckpointPayload,
+                        job.Id,
+                        job.RequestPayload,
+                        out var checkpointInterpretation,
+                        out var checkpointError))
+                {
+                    throw new PlanningJobProcessingException(
+                        "INVALID_CHECKPOINT",
+                        $"The saved planning checkpoint cannot be used: {checkpointError}.");
+                }
+
+                result = await workflow.ResumeFromCheckpointAsync(request, checkpointInterpretation, cancellationToken, locks);
             }
         }
         catch (OllamaPlanningInterpreterException exception)
@@ -132,6 +170,61 @@ public sealed class PlanningJobProcessor(
             JsonSerializer.SerializeToElement(result, result.GetType(), JsonOptions));
         return new PlanningJobProcessingResult(JsonSerializer.Serialize(envelope, JsonOptions));
     }
+
+    /// <summary>
+    /// The approved placements, from the replaced draft's snapshot, of its tasks in progress. A task in progress
+    /// without a readable placement fails the job rather than being dropped from, or rescheduled in, the replacement.
+    /// </summary>
+    private async Task<IReadOnlyList<PlanningTaskPlacement>> ReadInProgressPlacementsAsync(
+        Guid replacedJobId,
+        CancellationToken cancellationToken)
+    {
+        var replacedDraft = await dbContext!.Drafts
+            .Where(draft => draft.PlanningJobId == replacedJobId && draft.Status == DraftStatus.Approved)
+            .Select(draft => new { draft.Id, draft.ApprovedCandidatePayload })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (replacedDraft is null)
+            return [];
+
+        var inProgressTaskIds = await dbContext.DraftTaskProgress
+            .Where(progress => progress.DraftId == replacedDraft.Id && progress.Status == TaskProgressStatus.InProgress)
+            .Select(progress => progress.TaskId)
+            .ToListAsync(cancellationToken);
+        if (inProgressTaskIds.Count == 0)
+            return [];
+
+        List<PlanningTaskPlacement>? approvedPlacements = null;
+        try
+        {
+            approvedPlacements = JsonSerializer
+                .Deserialize<ApprovedSnapshot>(replacedDraft.ApprovedCandidatePayload ?? string.Empty, JsonOptions)?
+                .TaskPlacements?
+                .Where(placement => placement?.TaskId is not null && placement.TechnicianIds is not null)
+                .Select(placement => new PlanningTaskPlacement(
+                    placement!.TaskId!, placement.Start, placement.End, placement.TechnicianIds!))
+                .ToList();
+        }
+        catch (JsonException)
+        {
+            // Reported below as an unavailable placement
+        }
+
+        return inProgressTaskIds
+            .Select(taskId => approvedPlacements?.FirstOrDefault(placement =>
+                    string.Equals(placement.TaskId, taskId, StringComparison.OrdinalIgnoreCase)) ??
+                throw new PlanningJobProcessingException(
+                    "IN_PROGRESS_PLACEMENT_UNAVAILABLE",
+                    $"Task {taskId} is in progress on the approved plan being replaced, but its approved placement cannot be read."))
+            .ToList();
+    }
+
+    private sealed record ApprovedSnapshot(IReadOnlyList<ApprovedPlacement?>? TaskPlacements);
+
+    private sealed record ApprovedPlacement(
+        string? TaskId,
+        DateTimeOffset Start,
+        DateTimeOffset End,
+        IReadOnlyList<string>? TechnicianIds);
 
     private static string GetOutcome(PlanningWorkflowResult result) =>
         result switch

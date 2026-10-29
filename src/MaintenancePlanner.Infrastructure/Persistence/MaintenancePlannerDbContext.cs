@@ -19,6 +19,8 @@ public sealed class MaintenancePlannerDbContext(DbContextOptions<MaintenancePlan
     public DbSet<Reservation> Reservations => Set<Reservation>();
     public DbSet<LockedTaskAssignment> LockedTaskAssignments => Set<LockedTaskAssignment>();
     public DbSet<EditedTaskPlacement> EditedTaskPlacements => Set<EditedTaskPlacement>();
+    public DbSet<DraftTaskProgress> DraftTaskProgress => Set<DraftTaskProgress>();
+    public DbSet<BusinessActionRecord> BusinessActionRecords => Set<BusinessActionRecord>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -135,6 +137,24 @@ public sealed class MaintenancePlannerDbContext(DbContextOptions<MaintenancePlan
             .HasForeignKey(reservation => reservation.SparePartId)
             .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<Reservation>().Property(reservation => reservation.Status).HasConversion<string>();
+
+        modelBuilder.Entity<DraftTaskProgress>().HasKey(progress => progress.Id);
+        modelBuilder.Entity<DraftTaskProgress>()
+            .HasOne(progress => progress.Draft)
+            .WithMany()
+            .HasForeignKey(progress => progress.DraftId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<DraftTaskProgress>().Property(progress => progress.Status).HasConversion<string>();
+        modelBuilder.Entity<DraftTaskProgress>()
+            .HasIndex(progress => new { progress.DraftId, progress.TaskId })
+            .IsUnique();
+
+        // History rows have no foreign keys, so they can never block or be removed with the records they describe
+        modelBuilder.Entity<BusinessActionRecord>().HasKey(record => record.Id);
+        modelBuilder.Entity<BusinessActionRecord>().Property(record => record.Action).IsRequired();
+        modelBuilder.Entity<BusinessActionRecord>().Property(record => record.PerformedBy).IsRequired();
+        modelBuilder.Entity<BusinessActionRecord>().HasIndex(record => new { record.PlanningJobId, record.PerformedAtUtc });
+        modelBuilder.Entity<BusinessActionRecord>().HasIndex(record => new { record.DraftId, record.PerformedAtUtc });
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
