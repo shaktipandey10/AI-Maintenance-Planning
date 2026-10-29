@@ -23,7 +23,7 @@ Handover note (DEL10) and correction report (feedback point 34) for the AI Maint
 |---|---|
 | **1. Corrected requirement matrix** | [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) (implementation and verification tables for all 23 requirements); per-requirement code, test and evidence references in [FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) and [AI_REQUIREMENTS_TRACEABILITY.md](AI_REQUIREMENTS_TRACEABILITY.md); summary in section 3 below |
 | **2. Correction report** (gap, cause, correction, verification) | Section 2 below; the feedback-point mapping in [FEEDBACK_TRACEABILITY.md](FEEDBACK_TRACEABILITY.md); verification results in [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) and the run register in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md); open gaps in [SUBMISSION_GAP_SUMMARY.md](SUBMISSION_GAP_SUMMARY.md) |
-| **3. Updated repository, setup, AT01 to AT12 results and demonstration and export evidence** | Repository state and commits: section 8 below; setup: [README.md](../README.md) and section 6 below; AT01 to AT12: [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) and section 4 below; demonstration and export inventory: section 7 below (owner-confirmed, not independently inspected). Edits made after commit `7b32b28` are uncommitted. |
+| **3. Updated repository, setup, AT01 to AT12 results and demonstration and export evidence** | Repository state and commits: section 8 below; setup: [README.md](../README.md) and section 6 below; AT01 to AT12: [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) and section 4 below; demonstration and export inventory: section 7 below (owner-confirmed, not independently inspected). The evidence files and database are in the commit that follows `dd8a8ee` (section 8). |
 ### Where each resubmission deliverable is
 
 | # | Deliverable | Where it is | Current state |
@@ -69,7 +69,7 @@ One row per feedback area ([Feedback.md](Feedback.md)). **Cause** is given only 
 | Recovery and failures (29 to 32) | Interruption recovery; consistent state; duplicate prevention; actionable failures | Not recorded | Lease-based worker with heartbeat, checkpoint after a validated interpretation, idempotency keys, coded failure outcomes | Recovery, checkpoint-resume, idempotency and failure tests passed (R-13, R-14). The restart is an in-process host restart; no live process restart was run. |
 | Resubmission 33 | Corrected requirement matrix | Not recorded | [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) | Exists. Re-rated in final verification (section 3). |
 | Resubmission 34 | Correction report | Not recorded | This section | Causes are mostly unknown; the owner can supply them. |
-| Resubmission 35 | Fixed commit | Not recorded | Baseline commit `08748af` and the documentation follow-up commit `7b32b28` (section 8) | Established in two commits: `08748af` is the baseline against which the source and test results were reviewed, and the documentation follow-up commit `7b32b28` holds the final documents. See section 8 for what they exclude. |
+| Resubmission 35 | Fixed commit | Not recorded | Baseline commit `08748af` and the documentation follow-up commit `7b32b28` (section 8) | Established in two commits: `08748af` is the baseline against which the source and test results were reviewed, and the documentation follow-up commits (`7b32b28`, then `dd8a8ee`) hold the final documents. The recordings, screenshots, exports and database files are in the commit after `dd8a8ee`. See section 8. |
 | Resubmission 36 | Setup instructions | Not recorded | [README.md](../README.md) | A clean setup was **not** run; there is no reset command. |
 | Resubmission 37 | AT01 to AT12 results | Not recorded | [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) | 10 Pass — Automated, 2 Partial (AT05, AT12), all with a mocked model. |
 | Resubmission 38 | The demonstration | Not recorded | Owner-confirmed demonstration videos (section 7) | Not inspected. |
@@ -129,7 +129,7 @@ What the evidence is and is not:
 - **Clean setup: not verified.** The documented commands were not run from an empty checkout. The frontend dev, build and preview commands, the import script on a fresh database and the API start were not run in final verification.
 - **Reset: no command exists.** The requirement asks for a seed and reset command. The startup seed is automatic and the six-file import is a manual script ([DATA_DICTIONARY.md](DATA_DICTIONARY.md) sections 9 and 10). Imported manuals live outside the database, so recreating only the database leaves them.
 - **No `.env.example`** (no credentials are used). `frontend/package-lock.json` exists; no NuGet lock file or `global.json`.
-- **Database files:** `maintenance-planner.db` and `maintenance-planner copy.db` are tracked by git although `.gitignore` lists `*.db`. `maintenance-planner.db` shows as modified and **was not committed**. Its sidecars exist at the repository root.
+- **Database files:** `maintenance-planner.db` and `maintenance-planner copy.db` are tracked by git although `.gitignore` lists `*.db`. The modified `maintenance-planner.db` is committed in the commit after `dd8a8ee` at the owner's request. Its `-shm` and `-wal` sidecars and other scratch `.db` files at the repository root are git-ignored and not committed; the database contents were not inspected.
 - **Stray root files:** `test_output.txt`, `test_at10_all.txt`, `test_regressions.txt`, `generate_p102_pdf.cs`, `reduced-request.json` (left as they were).
 - **Tests:** all backend and frontend tests pass in the focused runs. The earlier fixture failure is fixed (section 4).
 
@@ -143,7 +143,7 @@ What the evidence is and is not:
 - `docs/` exports: 11 files: `V1_plan`, `V1_latest_plan` (`.json`, `.pdf`), `V1_Superseded` (`.pdf`), `V1_Draft` (`.pdf`), `V2_plan`, `V2_latest_plan` (`.json`, `.pdf`), `V2_Draft` (`.pdf`).
 - `docs/DebugAndTests/`: the test logs, including the final verification logs `Final_*.txt`.
 
-**Tracking state (checked with `git ls-files` and `git status`):** 3 of the 12 recordings and 17 of the 53 screenshots are tracked in earlier commits. 9 recordings, 36 screenshots and all 11 exports are untracked, as is `docs/DebugAndTests/AlternativeSelection.txt`, a manual test note that pre-dates this work and was not reviewed for it. The untracked files were left as found so the owner can decide how to package them. Documents that link to an untracked file link to a file that exists in the working tree but is in no commit.
+**Tracking state (checked with `git ls-files` and `git status`):** 3 of the 12 recordings and 17 of the 53 screenshots are tracked in earlier commits. The other 9 recordings, 36 screenshots, all 11 exports and `docs/DebugAndTests/AlternativeSelection.txt` (a manual test note that pre-dates this work and was not reviewed for it) are added in the commit after `dd8a8ee`, so the documents' links to them resolve once that commit is pushed. Their content was not inspected.
 
 ## 8. Repository state
 
@@ -152,9 +152,9 @@ What the evidence is and is not:
 | HEAD before final verification | `1376af5`, 2026-10-28 12:02:31 +05:30, "Add post-feedback maintenance planner corrections" |
 | Branch | `feedback-corrections` |
 | Remote | `origin` is configured to `https://github.com/shaktipandey10/AI-Maintenance-Planning.git`. Whether a reviewer can access it was **not checked**. |
-| Commits | **Baseline commit `08748af`** on `feedback-corrections` (parent `1376af5`), against which the source and test results were reviewed. Its source, test and frontend files are the ones the final verification runs tested. It does not contain the final documentation. The **documentation follow-up commit** after it holds the final documents (including the owner-reported manual-verification notes and consistency fixes); it is commit `7b32b28` (parent `08748af`). Further documentation edits after `7b32b28` are in the working tree until the owner approves a commit. |
+| Commits | **Baseline commit `08748af`** on `feedback-corrections` (parent `1376af5`), against which the source and test results were reviewed. Its source, test and frontend files are the ones the final verification runs tested. It does not contain the final documentation. The **documentation follow-up commit** after it holds the final documents (including the owner-reported manual-verification notes and consistency fixes); it is commit `7b32b28` (parent `08748af`). A further documentation commit, `dd8a8ee`, aligned terminology and the deliverables map. The recordings, screenshots, exports, database and archived-document deletions follow in the commit after `dd8a8ee`. |
 | Committed | Documentation (including the test logs and this note), the AI03 source and tests, the frontend changes and the import-screen files, the three-file test-fixture path fix, and `data/fixtures/fr02-demo/` |
-| Not committed (left as found) | `maintenance-planner.db` (modified) and its sidecars; the 12 deleted archived documents; 9 untracked recordings, 36 untracked screenshots and all 11 exports; `AlternativeSelection.txt`; and the documentation edits made after `7b32b28` |
+| Not committed | The git-ignored database sidecars and scratch `.db` files, and the stray root files listed above. The modified `maintenance-planner.db`, the 12 archived-document deletions, the remaining recordings, screenshots and exports, and `AlternativeSelection.txt` are in the commit after `dd8a8ee`. |
 
 No reset, clean, restore or deletion was performed.
 
