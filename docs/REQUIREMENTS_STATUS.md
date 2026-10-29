@@ -8,20 +8,20 @@ Consolidated status for FR01–FR10, AI01–AI07 and APP01–APP06 from [require
 - **Partial:** some required behaviour exists, but an element or its verification is outstanding.
 - **Not implemented:** the required behaviour is absent from the inspected source.
 
-**Evidence rules.** Test names are taken from the detailed documents. A test is claimed to pass only where a captured runner log exists in `docs/DebugAndTests/`. Screenshots and recordings are referenced but were not inspected unless stated. Where verification is missing, the reason says "unverified".
+**Evidence rules.** Test names are taken from the detailed documents. A test is claimed to pass only where a captured runner log exists in `docs/DebugAndTests/` (runs R-13 to R-20 passed with a mocked model). Screenshots, recordings and exports are owner-confirmed and were not inspected by the assistant; the owner's manual checks are in the "Manual verification" section at the end. Where verification is missing, the reason says "unverified".
 
-**Implementation and verification are kept apart (Stage 7).** A requirement is rated by what the source implements. Missing test evidence alone does not make a requirement Partial, and test source alone does not prove behaviour. Section "Implementation and verification classification" at the end of this document gives both for every row. The focused test runs R-13 to R-20 in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) all passed, with a mocked model; the real-model evidence is still one failed run.
+**Implementation and verification are kept apart (final verification).** A requirement is rated by what the source implements. Missing test evidence alone does not make a requirement Partial, and test source alone does not prove behaviour. Section "Implementation and verification classification" at the end of this document gives both for every row. The focused test runs R-13 to R-20 in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) all passed, with a mocked model; the real-model evidence is still one failed run.
 
 ## Functional requirements (section 2)
 
 | ID | Requirement (short) | Status | Reason | Detail and evidence |
 |---|---|---|---|---|
 | FR01 | Accept request, assets, window and objective; ask for missing mandatory information; store the clarified request and assumptions. | Implemented | Missing window or scope returns targeted questions. Resubmission keeps the request and resets the job. Clarification tests exist. | [FUNCTIONAL](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) · [AT02.txt](DebugAndTests/AT02.txt) |
-| FR02 | Import PDF manuals and CSV or JSON for assets, tasks, history, parts and availability; validate; report invalid rows without discarding them. | Implemented | All six datasets are supported by the import pipeline. Valid and invalid fixtures are tested. JSON and PDF import evidence logs are missing, which limits the evidence, not the implementation. | [FUNCTIONAL](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) · [data/fixtures/fr02-demo/README.md](../data/fixtures/fr02-demo/README.md) |
+| FR02 | Import PDF manuals and CSV or JSON for assets, tasks, history, parts and availability; validate; report invalid rows without discarding them. | Implemented | All six datasets are supported by the import pipeline. Valid and invalid fixtures are tested. The import tests, including JSON and PDF imports, passed (R-14, R-15). | [FUNCTIONAL](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) · [data/fixtures/fr02-demo/README.md](../data/fixtures/fr02-demo/README.md) |
 | FR03 | Schedule five assets with predecessors, durations, skills, technician capacity and part quantities; documented granularity; no technician overlap. | Implemented | The deterministic scheduler uses a documented 30-minute grid. The validator rejects technician overlaps. Five-asset tests exist. | [FUNCTIONAL](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) · [AT01.txt](DebugAndTests/AT01.txt), [AT10.txt](DebugAndTests/AT10.txt) |
 | FR04 | At least two distinct feasible alternatives, showing completion time, labour cost, deferred work and trade-offs. Say so if fewer are available. | Partial | Completion time, labour cost and deferred tasks are shown. Trade-offs are a fixed sentence per scheduling policy, not an explanation of why a plan was chosen. | [FUNCTIONAL](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) · [AlternativeSelection.txt](DebugAndTests/AlternativeSelection.txt) |
 | FR05 | Edit a task's assignment or timing; select an alternative; lock tasks; revalidate every edit; impossible locks must be resolved by the user. | Implemented | Edit, lock and unlock endpoints revalidate. Impossible locks are rejected with a conflict. Alternatives are selected by candidate index. | [FUNCTIONAL](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) · [AT05.txt](DebugAndTests/AT05.txt) |
-| FR06 | Submit a specific revision; approve only a valid one; reserve parts and technician slots atomically; reject stale approvals and show the conflict. | Implemented | Approval runs in one transaction with revalidation and a stock check. A concurrent last-unit test and stale-candidate tests exist. | [FUNCTIONAL](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) · [CancellationConcurrency.txt](DebugAndTests/CancellationConcurrency.txt), [AI03_ApprovalPath_Verification.txt](DebugAndTests/AI03_ApprovalPath_Verification.txt) |
+| FR06 | Submit a specific revision; approve only a valid one; reserve parts and technician slots atomically; reject stale approvals and show the conflict. | Implemented | Approval runs in one transaction with revalidation and a stock check. The concurrent last-unit and stale-candidate tests passed (R-13, R-14). | [FUNCTIONAL](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) · [CancellationConcurrency.txt](DebugAndTests/CancellationConcurrency.txt), [AI03_ApprovalPath_Verification.txt](DebugAndTests/AI03_ApprovalPath_Verification.txt) |
 | FR07 | On a change in stock, availability or window, identify affected work and create a new draft; preserve feasible locks; explain every material change; never overwrite an approved revision. | Partial | Replanning creates a linked revision, keeps feasible locks, and leaves the approved revision unchanged until a new approval. No before-and-after explanation of material changes exists (feedback point 19). | [FUNCTIONAL](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) · [AT12.txt](DebugAndTests/AT12.txt) · [FEEDBACK_TRACEABILITY.md](FEEDBACK_TRACEABILITY.md) |
 | FR08 | Record Not started, In progress and Completed task updates; replanning preserves completed work; cancellation releases only unused reservations; define and demonstrate when parts are consumed. | Implemented | Task status moves forward only. Consumption is recorded when the part task completes. Completed work is excluded from replans. Cancellation releases only unused stock. The rules are in code and tests. | [FUNCTIONAL](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) · [AT11.txt](DebugAndTests/AT11.txt) |
 | FR09 | Persist requests, revisions, source references, validation results, approvals, reservations and progress; reload after refresh and restart; record who performed each business action and when. | Partial | Persistence, reload and restart are tested. Approval, edit, lock, progress, part-consumption and replan actions are recorded with actor and time. Planning-request submission and clarification are not recorded as business actions (finding 1 below). Roles are self-declared, which §1 allows. | [FUNCTIONAL](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) · [AT13.txt](DebugAndTests/AT13.txt) |
@@ -59,7 +59,7 @@ Consolidated status for FR01–FR10, AI01–AI07 and APP01–APP06 from [require
 | Not implemented | 0 |
 | **Total** | **23** |
 
-**Judgement on "Not implemented".** No requirement is wholly absent. AI04 lacks its revise step, and APP02 lacks its requires-review outcome. Each is Partial because other required behaviour exists. A stricter reading would classify those missing elements as Not implemented. (The summary above was updated in Stage 7; see the final totals at the end of this document.)
+**Judgement on "Not implemented".** No requirement is wholly absent. AI04 lacks its revise step, and APP02 lacks its requires-review outcome. Each is Partial because other required behaviour exists. A stricter reading would classify those missing elements as Not implemented. (The summary above was updated in final verification; see the final totals at the end of this document.)
 
 ## AI03 status
 
@@ -70,7 +70,7 @@ Consolidated status for FR01–FR10, AI01–AI07 and APP01–APP06 from [require
 These are recorded here and not corrected in the source documents, as the stage requires.
 
 1. **FR09, request recording.** Planning-request submission and clarification are not recorded as business actions. `RecordBusinessAction` is called only for approval, edits, locks, progress, part consumption and replan. The current FR document does not state this gap.
-2. **APP05, refresh and double-submit.** The current FEEDBACK document records recovery as tested (points 29–31) but does not mention that a second UI submission creates a second job. This status is Partial because that behaviour is unverified.
+2. **APP05, refresh and double-submit.** Resolved in the final verification: the submit buttons are disabled while a request is in flight and a browser refresh does not resubmit (read from source), so APP05 is Fully implemented. A frontend test of the disabled state and a live process restart are still awaited.
 3. **APP02 and APP06.** These two requirements are not mapped in any current traceability document, so the gaps (no requires-review outcome; no retry action) appear only in this matrix.
 4. **Judgement on Partial.** This matrix may differ from a stricter reading of AI04 and APP02 (see the summary above).
 
@@ -78,7 +78,7 @@ These are recorded here and not corrected in the source documents, as the stage 
 
 Implementation classes: **Fully implemented**, **Partial** (behaviour the requirement asks for is missing or incomplete), **Not implemented**, **Cannot be established from source**. Verification is tracked separately. "Captured" means a log in `docs/DebugAndTests/` with its command and repository state. Paths are shortened: `Api/`, `Application/`, `Infrastructure/` mean `src/MaintenancePlanner.<Project>/`.
 
-| ID | Implementation | Key source | Captured verification (Stage 7, mocked model, isolated databases) | Missing behaviour, or verification still awaited |
+| ID | Implementation | Key source | Captured verification (final verification, mocked model, isolated databases) | Missing behaviour, or verification still awaited |
 |---|---|---|---|---|
 | FR01 | Fully | `Api/Endpoints/PlanningJobEndpoints.cs` (create, clarify); `Application/Planning/PlanningWorkflow.cs` | R-13, R-14, R-15 passed | Real-model clarification (see AI01) |
 | FR02 | Fully | `Api/Endpoints/ImportEndpoints.cs`; `Infrastructure/Imports/*`; `frontend/src/screens/ImportScreen.tsx` | R-14 (`FR02DataImportFileDatabaseTests`), R-15 (`ImportRecordReaderTests`), R-20 (ImportScreen) passed | The import script on a fresh database; the demo recording (owner-confirmed, not inspected) |
@@ -104,7 +104,7 @@ Implementation classes: **Fully implemented**, **Partial** (behaviour the requir
 | APP05 | Fully | `Api/Workers/PlanningJobWorker.cs`; `PlanningJobs.cs`; `frontend/src/screens/PlanningRequestScreen.tsx` | R-13, R-14 passed (in-process restart) | **Awaiting:** a live process restart; a frontend test of the disabled-submit state |
 | APP06 | **Partial** | `PlanningJobProcessor.cs`; `PlanningRequestScreen.tsx`; `DraftDetailScreen.tsx` | R-13, R-20 passed for what exists | **Missing:** a retry action or guidance on what can be retried; the UI shows the failure code, message and attempt count |
 
-## Final totals (Stage 7)
+## Final totals (final verification)
 
 | Classification | Count | Requirements |
 |---|---|---|
@@ -117,3 +117,14 @@ Implementation classes: **Fully implemented**, **Partial** (behaviour the requir
 **Fully implemented and still awaiting some verification: 3** (AI01, AI07, APP05). The other 9 fully implemented requirements have captured passing automated runs; "automated" here means a mocked model where interpretation is involved. AI03 is Partial for implementation reasons and also awaits real-model verification. No requirement is verified with the real model.
 
 **Changes since the previous matrix (10 Implemented, 13 Partial):** FR10 moved from Implemented to Partial after the export code was read. AI01, AI07 and APP05 moved from Partial to Implemented because their earlier Partial reasons were missing verification, not missing behaviour, and the focused tests passed. FR04, AI03 and the other Partial rows were re-checked against source and kept.
+
+## Manual verification (owner-reported)
+
+Checks the owner reports having done by hand in the running application (conversation of 2026-10-29). They were not repeated or inspected by the assistant, and they are **not** captured test runs.
+
+| ID | What the owner verified | Label | Effect on the rating above |
+|---|---|---|---|
+| FR08 | Progressed tasks in the application | **Completed. Manually verified by owner** | None needed; FR08 is already Fully implemented. |
+| FR10 | Checked the exports against the V1 and V2 planning job IDs | **Completed. Manually verified by owner** (IDs and revision) | Stays Partial. The export code writes no assumptions, evidence references or deferred work (`PlanExportService.cs`). A correct job ID does not show those fields are present. |
+| FR05 | Edited resources and saw the effect | **Completed. Manually verified by owner** | None needed; FR05 is already Fully implemented. |
+| FR07, AI06 | Replanned after edits; owner reports checking change comparison | **Manually verified by owner** (replanning); comparison **to be specified by the owner** | Stays Partial. No dedicated before-and-after comparison code was found in `src/` or `frontend/src`. If the owner saw a comparison in the application, the owner should say where, and the rating will be corrected. |

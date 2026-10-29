@@ -2,7 +2,7 @@
 
 Consolidated results for the acceptance scenarios AT01–AT12 in [requirementsforpoc.md](requirementsforpoc.md), section 6 (lines 91–102). This is the single source of truth for acceptance-test status. Requirement status is in [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md). Test-run evidence logs are in `docs/DebugAndTests/`.
 
-Repository state for the runs R-01 to R-12: HEAD `1376af5`, with uncommitted AI03 changes. Runs R-13 to R-20 (Stage 7) recorded HEAD `1376af5` with the uncommitted changes listed in each log header; the files tested are the ones in the submission commit that contains this report (see section 10).
+Repository state for the runs R-01 to R-12: HEAD `1376af5`, with uncommitted AI03 changes. Runs R-13 to R-20 (final verification) recorded HEAD `1376af5` with the uncommitted changes listed in each log header; the tested `src`, `tests` and `frontend` files matched those at baseline commit `08748af` (see section 10).
 
 ## 1. Status rules
 
@@ -27,7 +27,7 @@ Rules that apply throughout:
 | Fail | 0 | — |
 | Not verified | 0 | none |
 
-**Status after the Stage 7 runs (R-13 to R-20):** 10 Pass, 2 Partial (AT05, AT12), 0 Fail, 0 Not verified. Every Pass is an automated result with a mocked or fixed model interpretation and isolated databases; none is a real-model result. Before those runs the report had 0 Pass, 3 Partial (AT06, AT07, AT10) and 9 Not verified; that earlier state remains in the run register (R-01 to R-12) and in section 7, which describes it.
+**Status after the final verification runs (R-13 to R-20):** 10 Pass, 2 Partial (AT05, AT12), 0 Fail, 0 Not verified. Every Pass is an automated result with a mocked or fixed model interpretation and isolated databases; none is a real-model result. Before those runs the report had 0 Pass, 3 Partial (AT06, AT07, AT10) and 9 Not verified; that earlier state remains in the run register (R-01 to R-12) and in section 7, which describes it.
 
 ## 3. Scenario results
 
@@ -82,7 +82,7 @@ Each row records one run. New runs are added at the bottom, and existing rows ar
 | Item | Status | Evidence and limitation |
 |---|---|---|
 | AI03 real-model end-to-end run | **Partial** (retained) | R-12: real tool calls executed within the limit, but the job failed on CPU-only inference exceeding the 180-second timeout. No successful end-to-end run exists. |
-| AI03 mocked-model tests | Recorded | R-06, R-07, R-09, R-10, R-11. These use scripted model replies and are **not** real-model evidence. |
+| AI03 mocked-model tests | Recorded | R-06, R-07, R-09, R-10, R-11, R-16, R-17. These use scripted model replies and are **not** real-model evidence. |
 | Small real-model AI evaluation set (§6, DEL07) | **Not verified** (not created) | No evaluation cases or results exist. This is a missing deliverable. |
 
 AI03 remains Partial. Successful real-model end-to-end verification has not been demonstrated.
@@ -99,7 +99,7 @@ Use this structure when adding a test case or a new execution.
 
 ## 7. Limitations, contradictions and missing evidence
 
-> **Historical (written before the Stage 7 runs).** Items 1, 3, 7, 8 and 9 below describe the evidence position at R-01 to R-12. Section 10 records what the Stage 7 runs changed. Items 2, 4, 5, 6 and 11 to 13 still apply.
+> **Historical (written before the final verification runs).** Items 1, 3, 7, 8 and 9 below describe the evidence position at R-01 to R-12. Section 10 records what the final verification runs changed. Items 2, 4, 5, 6 and 11 to 13 still apply.
 
 1. **No captured run names the acceptance tests** for AT01–AT05, AT08, AT09, AT11 and AT12, so nine scenarios are Not verified.
 2. **Narrative claims are not corroborated.** `AT12.txt` claims 75/75 across AT01–AT12. `AT01.txt` and others claim all tests pass. No captured output in the repository supports those claims, and they are not used as results.
@@ -117,7 +117,7 @@ Use this structure when adding a test case or a new execution.
 
 ## 8. Next actions to reach Pass
 
-> **Partly superseded.** Actions 1 to 3 were carried out in Stage 7 for the focused test classes (R-13 to R-20, section 10). Actions 4 and 5 are still open for AT05 and AT12, and the live and real-model checks listed at the end of section 10 are still needed.
+> **Partly superseded.** Actions 1 to 3 were carried out in final verification for the focused test classes (R-13 to R-20, section 10). Actions 4 and 5 are still open for AT05 and AT12, and the live and real-model checks listed at the end of section 10 are still needed.
 
 Each action needs approval before it is run:
 1. Run each acceptance test class at one fixed commit, with the command and commit recorded. Start with AT01, AT02, AT03, AT04, AT05, AT08, AT09, AT11 and AT12.
@@ -137,7 +137,7 @@ Added without changing any status, row or run record above.
 - **Tests cited as AI01 evidence:** the two `OllamaPlanningJobIntegrationTests` that the traceability documents cite for clarification and candidate generation are the tests that fail in R-08 (fixture problem). They do not currently support AI01.
 - **Stray files:** `test_output.txt`, `test_at10_all.txt`, `test_regressions.txt` and `generate_p102_pdf.cs` are still in the repository root.
 
-## 10. Stage 7 verification (appended)
+## 10. final verification verification (appended)
 
 Focused runs R-13 to R-20 were captured on 2026-10-29 between 14:56 and 15:03 +05:30. Nothing was run against the live API, the original database or Ollama.
 
@@ -154,4 +154,17 @@ Focused runs R-13 to R-20 were captured on 2026-10-29 between 14:56 and 15:03 +0
 - The live demonstration steps of AT12 and the recordings are owner-reported deliverables and were not inspected.
 - Frontend behaviour was run only through unit tests with a mocked API client (R-20). Browser-level behaviour was not run.
 
-**Remaining verification needed (all need the live API, the original database or Ollama, so not run in Stage 7):** a real-model end-to-end planning run through approval; a live process restart for AT09; a live duration or quantity change for AT12; a clean-setup run from an empty checkout.
+**Remaining verification needed (all need the live API, the original database or Ollama, so not run in final verification):** a real-model end-to-end planning run through approval; a live process restart for AT09; a live duration or quantity change for AT12; a clean-setup run from an empty checkout.
+
+## 11. Manual verification reported by the owner (appended)
+
+These checks were carried out by the owner in the running application and reported in conversation on 2026-10-29. The assistant did not repeat or inspect them, so they are recorded as owner-reported. They are **not** automated runs and are not in the run register.
+
+| Check | Label |
+|---|---|
+| Progressed tasks in the application | **Completed. Manually verified by owner** |
+| Checked the PDF and JSON exports against the planning job IDs for V1 and V2 | **Completed. Manually verified by owner** (IDs and revision match) |
+| Edited resources and replanned, and observed the result in the application | **Completed. Manually verified by owner** |
+| Demonstration videos and B1 and B2 exports | **Owner-confirmed deliverables** |
+
+These checks do not change the AT01 to AT12 statuses in section 3. They support AT11 (progress, replan, export) and AT12 (a live change), but the live duration or quantity change for AT12 was not itemised in the report, so AT12 stays Partial until the owner says which change was made.

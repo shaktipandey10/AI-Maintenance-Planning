@@ -2,7 +2,7 @@
 
 This is the single detailed data dictionary for the AI Maintenance Planner. It covers the persisted entities, their fields and relationships, the enumerations, the sample datasets, the startup seed, the import process, and the reset position.
 
-It was written from source at HEAD `1376af5` plus uncommitted changes. **No test was run, the API was not started, Ollama was not invoked, and no database file or sidecar was opened in the stage that wrote it.** Nothing here claims that a clean setup, an import run or a reset was tested. Statements about runtime behaviour come from reading code and are labelled *derived from code* where that matters.
+It was written from source (HEAD `1376af5` plus changes now committed in `08748af`). No database file or sidecar was opened for it. The import and persistence tests later passed (section 8.5). Nothing here claims that a clean setup, an import run or a reset was tested. Statements about runtime behaviour come from reading code and are labelled *derived from code* where that matters.
 
 Related documents:
 - [README.md](../README.md): setup, configuration and run commands (the data section there is a summary of this file)
@@ -400,7 +400,7 @@ The `recordNumber` is the CSV line number (the header is line 1), the one-based 
 | `fr02-invalid-assets.csv` | 422; 5 rows read, 0 imported, 4 invalid rows, 5 issues: `priority` below range (row 3), `priority` not a number (row 4), identifier with spaces (row 5), duplicate ID (row 6), empty `name` (row 6). The valid row 2 is not saved. |
 | `fr02-invalid-assets-unknown-column.csv` | 422; one file-level issue "Unknown column 'location'"; the bad `priority` on row 3 is not reported. |
 
-**Evidence status:** the fixture README says these outcomes are "derived from the validator code ... not from a recorded run". Automated tests cover the same behaviour with inline data (`FR02DataImportFileDatabaseTests`: valid CSV and JSON for every dataset; invalid asset rows; invalid task records; invalid availability and part rows; malformed files; text PDF; invalid PDFs). **Stage 7:** the `FR02DataImportFileDatabaseTests` class (valid CSV and JSON for every dataset, invalid rows, malformed files, text and invalid PDF imports) and `ImportRecordReaderTests` passed on 2026-10-29 (R-14 and R-15 in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md)), using temporary databases and manual directories. That run used the tests' own inline data, not the files in `data/fixtures/`, and the import script was not run. Invalid-data **files** exist only for assets; the invalid task, availability, part and PDF cases exist only inside tests.
+**Evidence status:** the fixture README says these outcomes are "derived from the validator code ... not from a recorded run". Automated tests cover the same behaviour with inline data (`FR02DataImportFileDatabaseTests`: valid CSV and JSON for every dataset; invalid asset rows; invalid task records; invalid availability and part rows; malformed files; text PDF; invalid PDFs). **final verification:** the `FR02DataImportFileDatabaseTests` class (valid CSV and JSON for every dataset, invalid rows, malformed files, text and invalid PDF imports) and `ImportRecordReaderTests` passed on 2026-10-29 (R-14 and R-15 in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md)), using temporary databases and manual directories. That run used the tests' own inline data, not the files in `data/fixtures/`, and the import script was not run. Invalid-data **files** exist only for assets; the invalid task, availability, part and PDF cases exist only inside tests.
 
 ## 9. Loading the sample data
 
@@ -460,4 +460,4 @@ What exists, all *derived from code and not executed*:
 8. **Unused enum values.** `PlanningJobStatus.Cancelled`, `DraftStatus.Pending` and `ReservationStatus.Pending` are never assigned.
 9. **`Asset.Priority` ordering** (whether 1 is the highest) is not stated in any source read.
 10. **The PDF manuals** were not opened, so their section headings and the fit between task `sourceSection` values and the bundled manuals are *not verified here*. The import validator checks this at import time.
-11. **Evidence gaps.** There are no recorded runs of the import script, of a clean setup, or of the JSON and PDF imports. The FR02 and FR03 behaviour above comes from source and from the existence of automated tests, not from evidence logs written for this document.
+11. **Evidence gaps.** The import script and the demo fixture files have not been run, and no clean setup has been run. The import and persistence behaviour above comes from source and from the automated tests that passed (R-14, R-15), which use their own inline data.

@@ -2,7 +2,7 @@
 
 This is the AI design note (DEL05) for the AI Maintenance Planner. It records what the code does with the language model: the prompts, the output contract, the tools, the retrieval of evidence, the limits, and the boundaries between the model and the application.
 
-It was written from source at HEAD `1376af5` plus uncommitted changes (the AI03 tool-calling work is uncommitted). **Nothing in it was run in the stage that wrote it:** no test, no API, no Ollama call, no database access. Statements about behaviour come from reading code. The evidence for each claim is classified in section 9 as source inspection, mocked test, or real-model run.
+It was written from source (HEAD `1376af5` plus the AI03 work that was then uncommitted, now committed in `08748af`). Statements about behaviour come from reading code and are backed by the mocked-model test runs listed in section 9. The live API and the real model were not used, except for the one recorded real-model run (E-AI03-08). The evidence for each claim is classified in section 9 as source inspection, mocked test, or real-model run.
 
 **Headline status:** the model-callable tools (AI03) are implemented and tested with a mocked model. The one recorded real-model run **timed out** (`OLLAMA_TIMEOUT`). **A successful real-model end-to-end run has not been demonstrated.** AI03 stays **Partial**.
 
@@ -343,7 +343,7 @@ Three classes of evidence are kept apart. Only the third class can show real-mod
 - The tests above were run at HEAD `1376af5` with uncommitted changes. This note was written from the working tree afterwards. Whether the source changed between a given test run and this note was not checked.
 - **There is no small AI evaluation set** (DEL07); see [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) section 5.
 - Interpretation without tools (the default) has mocked-model tests in `OllamaPlanningRequestInterpreterTests` and the AT10 error-handling tests. The traceability document records that none shows real-model behaviour.
-- **Stage 7 reruns (2026-10-29, mocked model):** R-16 (38 AI03 integration tests) and R-17 (116 AI03 unit tests) passed, and R-15 (143 unit tests, including `OllamaPlanningRequestInterpreterTests` and `AT10ErrorHandlingTests`) passed, all in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md). They add repeatability to E-AI03-01 to E-AI03-11 and do **not** change the real-model position: the only real-model run (E-AI03-08) timed out, and no successful real-model end-to-end run has been demonstrated.
+- **final verification reruns (2026-10-29, mocked model):** R-16 (38 AI03 integration tests) and R-17 (116 AI03 unit tests) passed, and R-15 (143 unit tests, including `OllamaPlanningRequestInterpreterTests` and `AT10ErrorHandlingTests`) passed, all in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md). They add repeatability to E-AI03-01 to E-AI03-11 and do **not** change the real-model position: the only real-model run (E-AI03-08) timed out, and no successful real-model end-to-end run has been demonstrated.
 
 ## 10. Assumptions and known limitations
 

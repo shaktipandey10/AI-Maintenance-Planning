@@ -1,6 +1,6 @@
 # Architecture and API
 
-This document describes the AI Maintenance Planner as implemented in the repository. It was written from source, at HEAD `1376af5` with uncommitted AI03 changes. **It was not runtime-tested in the stage that wrote it.** Behaviour marked *unverified* was not established from source.
+This document describes the AI Maintenance Planner as implemented in the repository. It was written from source, at HEAD `1376af5` with the AI03 changes that were then uncommitted (now committed in `08748af`). The behaviour it describes was later exercised by automated tests (see the last section); the live API and the real model were not used. Behaviour marked *unverified* was not established from source.
 
 Related documents:
 - [README.md](../README.md): setup, configuration and run commands
@@ -195,7 +195,7 @@ Values: `NotStarted`, `InProgress`, `Completed`. The only allowed transitions ar
 11. **Parts are reserved** (`ReservePartsAsync`). Retained confirmed reservations plus the required quantity must not exceed on-hand stock (`INSUFFICIENT_INVENTORY`). The replaced draft's unconsumed reservations are released. Confirmed reservations are inserted, and `SparePart.ReservedQuantity` is set.
 12. The replaced draft becomes `Superseded`.
 13. The new draft is inserted as `Approved` with `ApprovedCandidatePayload`. In-progress tasks carry over as `InProgress`. One lock is created per placed task for its first technician. An `Approved` business action is recorded. Changes are saved and the transaction commits.
-14. **Concurrent creation.** A unique-constraint violation on `Draft.PlanningJobId` rolls back and returns the existing approved draft, or `CONCURRENT_DRAFT_CREATION` if none exists. A concurrency exception returns `CONCURRENT_MODIFICATION`. A source comment says SQLite transactions begin `IMMEDIATE`, so concurrent approvals are serialised (`DraftApprovalService.cs:60`). Concurrent-approval test cases exist in `AT06ConcurrentApprovalTests.cs`, but this document does not rely on a captured run showing that they passed (see §9).
+14. **Concurrent creation.** A unique-constraint violation on `Draft.PlanningJobId` rolls back and returns the existing approved draft, or `CONCURRENT_DRAFT_CREATION` if none exists. A concurrency exception returns `CONCURRENT_MODIFICATION`. A source comment says SQLite transactions begin `IMMEDIATE`, so concurrent approvals are serialised (`DraftApprovalService.cs:60`). The concurrent-approval tests in `AT06ConcurrentApprovalTests.cs` and `F01ConcurrentInventoryApprovalFileDatabaseTests.cs` passed (R-13, R-14).
 
 Success returns `202 Accepted` with `Location: /api/drafts/{draftId}`. Failures return `409` with an `ApprovalErrorResponse`.
 
@@ -400,7 +400,7 @@ The tool loop, the six tools and the approval path of saved candidates are imple
 | Stale worker completing a job it has lost | Refused, because the lease token and version no longer match. | `PlanningJobs.CompleteAsync` |
 | Attempts exhausted | `Failed` with `MAX_ATTEMPTS_EXCEEDED`. | `ClaimNextAsync` |
 | Two approvals of the same job | The second returns the existing draft. A unique index prevents a second draft. | `DraftApprovalService` |
-| Concurrent approvals competing for the last unit of a part | Intended to be serialised by the transaction, with the stock check inside it (§5.1 step 11). **Test source exists; captured execution evidence is limited.** `AT06ConcurrentApprovalTests.cs` contains concurrent-approval tests, including `AT06_TwoParallelApprovalsCompeteForFinalBR101_OnlyOneSucceeds` and the parallel HTTP test `AT06_TrueParallelApprovalsViaHttpApi_ExactlyOneSucceedsWithFinalBR101`. The only related log, [CancellationConcurrency.txt](DebugAndTests/CancellationConcurrency.txt), is mainly about concurrent cancellations. Its narrative lists the first approval test as passing (10 passed, 0 failed), but it records no command, date or commit, and it names a test that is not in the current source. It does not name the HTTP test. No log is relied on here to show that the concurrent-approval tests passed. | `DraftApprovalService.cs`; `AT06ConcurrentApprovalTests.cs`; [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) |
+| Concurrent approvals competing for the last unit of a part | Intended to be serialised by the transaction, with the stock check inside it (§5.1 step 11). **Verified by automated tests:** `AT06_TwoParallelApprovalsCompeteForFinalBR101_OnlyOneSucceeds`, the parallel HTTP test `AT06_TrueParallelApprovalsViaHttpApi_ExactlyOneSucceedsWithFinalBR101` and `ParallelApprovalsForLastUnit_OnFileDatabase_ExactlyOneReserves_LosersLeaveNoSideEffects` passed (R-13, R-14); they assert one approval and a reserved quantity of 1. The older log [CancellationConcurrency.txt](DebugAndTests/CancellationConcurrency.txt) is a historical narrative. | `DraftApprovalService.cs`; `AT06ConcurrentApprovalTests.cs`; [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) |
 | Missing stock data | Reported as `PART_DATA_UNAVAILABLE`, not as zero stock. | `PlanningCandidateValidator` |
 | Export of an unapproved draft | `409`. | `PlanExportService`; `PlanProgressEndpoints` |
 | Failure after approval when a resource changes | **No requires-review outcome exists.** The approved draft keeps its status. | Not implemented (APP02 in REQUIREMENTS_STATUS.md) |
@@ -436,17 +436,17 @@ These are recorded here and not corrected in the source documents.
 5. **Ignored clarification field.** `SubmitClarificationRequest.AdditionalContext` is accepted but not used by the clarification handler.
 6. **Template endpoint.** `GET /weatherforecast` remains in `Program.cs`.
 7. **Tracked database file.** The repository-root database is tracked by git, although `.gitignore` lists it. Running the API changes a tracked file.
-8. **Code comment about SQLite.** A source comment says SQLite begins transactions as `IMMEDIATE`. This was not verified at runtime.
+8. **Code comment about SQLite.** A source comment says SQLite begins transactions as `IMMEDIATE`. The parallel-approval tests pass (R-13, R-14), which supports but does not prove this.
 
 ## 12. Verification status
 
 **Verified from source in this document:** components and their files (§1); the planning flow and its failure paths (§2); the persistence keys, indexes and relationships (§3); the job, draft, reservation and task states and their transitions (§4); approval, cancellation, locks, progress, edits, revisions and idempotency (§5); endpoint methods, paths, request and response shapes, and status codes (§6); configuration keys and defaults (§7); the tool loop, its tools and its error codes (§8); recovery paths (§9).
 
 **Not verified from source in this document:**
-- Everything in this document is a reading of source. Items that an earlier version listed as unverified (the in-progress conflict code, repeated mark-task-complete, the unlock checks, the revision endpoint's header requirement, the outcome names) were later read from source and are now stated in §5 and in [API.md](API.md). They are still not runtime-tested.
+- Everything in this document is a reading of source. Items that an earlier version listed as unverified (the in-progress conflict code, repeated mark-task-complete, the unlock checks, the revision endpoint's header requirement, the outcome names) were later read from source and are now stated in §5 and in [API.md](API.md). They are covered by the automated runs described at the end of this document.
 
-**Not runtime-tested in this stage.** No test was run, the API was not started, and Ollama was not invoked. The behaviour described here is what the source shows. The acceptance results are in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md). **AI03 real-model end-to-end verification remains outstanding.**
+**Verification status.** The behaviour described here is what the source shows. Automated tests exercised it (below); the API was not started and Ollama was not invoked. The acceptance results are in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md). **AI03 real-model end-to-end verification remains outstanding.**
 
-**Later test evidence.** Focused automated runs on 2026-10-29 (R-13 to R-20 in the acceptance report) exercised the approval, reservation, idempotency, replacement, progress, recovery, import and AI03 behaviour described above. All passed. They used a mocked model and isolated in-memory or temporary databases, not the live API or the real model.
+**Test evidence.** Focused automated runs on 2026-10-29 (R-13 to R-20 in the acceptance report) exercised the approval, reservation, idempotency, replacement, progress, recovery, import and AI03 behaviour described above. All passed. They used a mocked model and isolated in-memory or temporary databases, not the live API or the real model.
 
 **Export content (read from `PlanExportService.cs`).** The JSON and PDF exports of an approved draft contain the draft ID, approval time, planning job ID, overall and per-part progress, and the approved task placements (task, start, end, technicians, status). They do **not** contain assumptions, evidence references or deferred work, which requirement FR10 lists. The PDF shows the placements and embeds the same JSON text.

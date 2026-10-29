@@ -1,6 +1,6 @@
 # Submission Handover Note
 
-Handover note (DEL10) and correction report (feedback point 34) for the AI Maintenance Planner. Updated on 2026-10-29 after the Stage 7 functional assessment and focused test runs.
+Handover note (DEL10) and correction report (feedback point 34) for the AI Maintenance Planner. Updated on 2026-10-29 after the final verification functional assessment and focused test runs.
 
 **Basis.** Source and documents were read. Focused automated tests were run on 2026-10-29 with a mocked model and isolated in-memory or temporary databases (run register R-13 to R-20 in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md)). **The API was not started, the real model was not called, and the original database and its sidecars were not opened.** Where a fact is not in the repository it is marked **Owner confirmation required** and is not estimated.
 
@@ -33,9 +33,9 @@ One row per feedback area ([Feedback.md](Feedback.md)). **Cause** is given only 
 | Application workflow (17 to 21) | Editing, replanning, **change comparison**, saved plans, business-action history | Not recorded | Editing, locks, replanning, saved plans and history are implemented | Their tests passed (R-14, R-18). **Change comparison is not implemented** (point 19). |
 | AI requirements (22 to 28) | Verify AI01 to AI07; inspectable evidence; callable tools; bounded validation and repair; context across changes; invalid output; real versus mocked evidence | Not recorded for the original gaps. One defect has a recorded cause: the prompt did not carry the request's window ID, so the real model invented one (`AI03_Stage3_RealModelRun.txt`). | Tool-calling loop and six tools behind `Ollama:EnableTools` (off by default); the prompt now carries `selectedWindowId`; real and mocked evidence are separated ([AI_DESIGN.md](AI_DESIGN.md)) | AI03 integration and unit tests passed again with a mocked model (R-16, R-17). **The one real-model run failed with `OLLAMA_TIMEOUT`, and the window-ID fix was not re-run with the real model.** The repair step (AI04), evidence inspection from the UI (AI02) and the before-and-after summary (AI06) remain absent. |
 | Recovery and failures (29 to 32) | Interruption recovery; consistent state; duplicate prevention; actionable failures | Not recorded | Lease-based worker with heartbeat, checkpoint after a validated interpretation, idempotency keys, coded failure outcomes | Recovery, checkpoint-resume, idempotency and failure tests passed (R-13, R-14). The restart is an in-process host restart; no live process restart was run. |
-| Resubmission 33 | Corrected requirement matrix | Not recorded | [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) | Exists. Re-rated in Stage 7 (section 3). |
+| Resubmission 33 | Corrected requirement matrix | Not recorded | [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) | Exists. Re-rated in final verification (section 3). |
 | Resubmission 34 | Correction report | Not recorded | This section | Causes are mostly unknown; the owner can supply them. |
-| Resubmission 35 | Fixed commit | Not recorded | The Stage 7 commit (section 8) | Established; see section 8 for what it excludes. |
+| Resubmission 35 | Fixed commit | Not recorded | Baseline commit `08748af` and the documentation follow-up commit (section 8) | Established in two commits: `08748af` is the baseline against which the source and test results were reviewed, and the documentation follow-up commit holds the final documents. See section 8 for what they exclude. |
 | Resubmission 36 | Setup instructions | Not recorded | [README.md](../README.md) | A clean setup was **not** run; there is no reset command. |
 | Resubmission 37 | AT01 to AT12 results | Not recorded | [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) | 10 Pass, 2 Partial (AT05, AT12), all with a mocked model. |
 | Resubmission 38 | The demonstration | Not recorded | Owner-confirmed demonstration videos (section 7) | Not inspected. |
@@ -55,7 +55,7 @@ Rated by what the source implements, with verification tracked separately ([REQU
 
 **Fully implemented and still awaiting verification: 3.** AI01 and AI07 await a real-model run, and APP05 awaits a live process restart and a frontend test of the disabled-submit state. The other nine fully implemented requirements have captured passing automated runs.
 
-**Changes in Stage 7:** FR10 moved from Implemented to Partial after the export code was read (assumptions, evidence and deferred work are not exported). AI01, AI07 and APP05 moved from Partial to Implemented because their earlier Partial reasons were missing verification, not missing behaviour. AI03 stays Partial because two of its tools lack the replanning context and there is no real-model success.
+**Changes in final verification:** FR10 moved from Implemented to Partial after the export code was read (assumptions, evidence and deferred work are not exported). AI01, AI07 and APP05 moved from Partial to Implemented because their earlier Partial reasons were missing verification, not missing behaviour. AI03 stays Partial because two of its tools lack the replanning context and there is no real-model success.
 
 ## 4. Acceptance-test status
 
@@ -68,6 +68,7 @@ What the evidence is and is not:
 - AT09 is an in-process restart, not a live process restart.
 - A test-fixture path was fixed first: three fixtures looked for `requirementsforpoc.md` at the repository root. That is the failure recorded as R-08, and it kept AT03 and AT04 from running.
 - No small real-model AI evaluation set exists.
+- **Owner-reported manual checks (not repeated by the assistant):** task progress, the exports against the V1 and V2 planning job IDs, and resource edits with replanning were checked by hand in the running application. They are labelled *Completed. Manually verified by owner* in [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) and [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) section 11, and do not change the automated statuses.
 
 ## 5. Known limitations
 
@@ -91,7 +92,7 @@ What the evidence is and is not:
 
 ## 6. Setup and reproducibility status
 
-- **Clean setup: not verified.** The documented commands were not run from an empty checkout. The frontend dev, build and preview commands, the import script on a fresh database and the API start were not run in Stage 7.
+- **Clean setup: not verified.** The documented commands were not run from an empty checkout. The frontend dev, build and preview commands, the import script on a fresh database and the API start were not run in final verification.
 - **Reset: no command exists.** The requirement asks for a seed and reset command. The startup seed is automatic and the six-file import is a manual script ([DATA_DICTIONARY.md](DATA_DICTIONARY.md) sections 9 and 10). Imported manuals live outside the database, so recreating only the database leaves them.
 - **No `.env.example`** (no credentials are used). `frontend/package-lock.json` exists; no NuGet lock file or `global.json`.
 - **Database files:** `maintenance-planner.db` and `maintenance-planner copy.db` are tracked by git although `.gitignore` lists `*.db`. `maintenance-planner.db` shows as modified and **was not committed**. Its sidecars exist at the repository root.
@@ -106,18 +107,18 @@ What the evidence is and is not:
 - `docs/Recordings/`: 12 `.webm` files (about 149 MB): `AlternativeApproval_EndtoEnd`, `Cancelation_SparePartRelease`, `Candidate_Approval_Draft_Progressing_flow`, `ImportOfDataValidAndInvalid`, `Infeasible_scenerio`, `JobScheduling`, `Locking_Revision_Replan_Idempotency_ClarificationWindow`, `Restart_JobRunScenario`, `TaskProgres_ReplanWorkPreservation`, `V1-V2_lifecycle`, `V1-V2_lifecycle_Part2`, `V1-V2_lineageDemo`.
 - `docs/Screenshots/`: 53 files.
 - `docs/` exports: 11 files: `V1_plan`, `V1_latest_plan` (`.json`, `.pdf`), `V1_Superseded` (`.pdf`), `V1_Draft` (`.pdf`), `V2_plan`, `V2_latest_plan` (`.json`, `.pdf`), `V2_Draft` (`.pdf`).
-- `docs/DebugAndTests/`: the test logs, including the Stage 7 logs `Final_*.txt`.
+- `docs/DebugAndTests/`: the test logs, including the final verification logs `Final_*.txt`.
 
-**Not in the Stage 7 commit:** the recordings, screenshots and exports, and `docs/DebugAndTests/AlternativeSelection.txt`, a manual test note that pre-dates this work and was not reviewed for it. They were left untouched and uncommitted so the owner can decide how to package them. Documents that link to them link to files that exist in the working tree but not in the commit.
+**Not in commit `08748af`:** the recordings, screenshots and exports, and `docs/DebugAndTests/AlternativeSelection.txt`, a manual test note that pre-dates this work and was not reviewed for it. They were left untouched and uncommitted so the owner can decide how to package them. Documents that link to them link to files that exist in the working tree but not in the commit.
 
 ## 8. Repository state
 
 | Item | Value |
 |---|---|
-| HEAD before Stage 7 | `1376af5`, 2026-10-28 12:02:31 +05:30, "Add post-feedback maintenance planner corrections" |
+| HEAD before final verification | `1376af5`, 2026-10-28 12:02:31 +05:30, "Add post-feedback maintenance planner corrections" |
 | Branch | `feedback-corrections` |
 | Remote | `origin` is configured to `https://github.com/shaktipandey10/AI-Maintenance-Planning.git`. Whether a reviewer can access it was **not checked**. |
-| Fixed submission commit | The commit that adds this file, on `feedback-corrections`. Its hash is in the git log and in the Stage 7 report (a file cannot contain its own commit hash). The source, test and frontend files in it are the ones the Stage 7 runs tested. |
+| Commits | **Baseline commit `08748af`** on `feedback-corrections` (parent `1376af5`), against which the source and test results were reviewed. Its source, test and frontend files are the ones the final verification runs tested. It does not contain the final documentation. The **documentation follow-up commit** after it holds the final documents (including the owner-reported manual-verification notes and consistency fixes); its hash is in `git log`. |
 | Committed | Documentation (including the test logs and this note), the AI03 source and tests, the frontend changes and the import-screen files, the three-file test-fixture path fix, and `data/fixtures/fr02-demo/` |
 | Not committed (left as found) | `maintenance-planner.db` (modified) and its sidecars; the 12 deleted archived documents; the recordings, screenshots and exports; `AlternativeSelection.txt` |
 
@@ -149,7 +150,7 @@ No reset, clean, restore or deletion was performed.
 | Reused libraries | Backend: ASP.NET Core and Entity Framework Core 10.0.13 with SQLite, PdfPig 0.1.16, iTextSharp 5.5.13.3, Swashbuckle.AspNetCore 10.3.1, Microsoft.AspNetCore.OpenApi 10.0.8; tests: xUnit 2.9.3, FluentAssertions 8.11.0, Moq 4.21.0, coverlet 6.0.4. Frontend: React 19.3.1, html2pdf.js 0.14.0, Vite, Vitest, Testing Library, oxlint, TypeScript. | Recorded from `*.csproj` and `package.json`; which parts were written by hand is **owner confirmation required** |
 | Licence information found | From local package metadata only: PdfPig `Apache-2.0`, Swashbuckle.AspNetCore `MIT`, html2pdf.js `MIT`, React, Vite and Vitest `MIT`. The iTextSharp 5.5.13.3 package metadata links to the GNU AGPL page. No other licence was checked. There is **no `LICENSE` file**. | **No legal conclusion is drawn.** See the licence item in [SUBMISSION_GAP_SUMMARY.md](SUBMISSION_GAP_SUMMARY.md). |
 | Templates | The frontend started from the Vite React TypeScript template (`frontend/README.md` still holds template text). The API still contains the .NET weather-forecast template route. | Recorded; extent of reuse **owner confirmation required** |
-| AI coding assistance | In the working sessions recorded for this documentation, **Claude Code** (an AI coding assistant) wrote the AI03 source and tests, the three-file test-fixture fix, the Stage 7 test runs and their logs, and the requirement-status, traceability, README, architecture, data-dictionary, AI-design, API, acceptance-report and handover documents, under the owner's step-by-step instructions. The instructions were headed "Copilot Agent", so the owner must say whether GitHub Copilot or other tools were also used, and which tools produced the earlier code (the commits before 2026-10-29). | **Owner confirmation required** for the whole project |
+| AI coding assistance | In the working sessions recorded for this documentation, **Claude Code** (an AI coding assistant) wrote the AI03 source and tests, the three-file test-fixture fix, the final verification test runs and their logs, and the requirement-status, traceability, README, architecture, data-dictionary, AI-design, API, acceptance-report and handover documents, under the owner's step-by-step instructions. The instructions were headed "Copilot Agent", so the owner must say whether GitHub Copilot or other tools were also used, and which tools produced the earlier code (the commits before 2026-10-29). | **Owner confirmation required** for the whole project |
 
 ## 11. Submission blockers and recommended next actions
 

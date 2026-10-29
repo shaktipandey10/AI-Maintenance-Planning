@@ -4,7 +4,7 @@ A proof-of-concept application that helps a planner turn a natural-language main
 
 The scope comes from [docs/requirementsforpoc.md](docs/requirementsforpoc.md) (the original assignment) and [docs/Feedback.md](docs/Feedback.md) (the reviewer's feedback). Current status is in [docs/REQUIREMENTS_STATUS.md](docs/REQUIREMENTS_STATUS.md).
 
-> **Status at a glance.** Most functional requirements are implemented and covered by tests. The AI tool-calling path (AI03) is **Partial**: it has not completed a successful real-model end-to-end run. Several gaps are listed in [Known limitations](#10-known-limitations-and-unverified-behaviour).
+> **Status at a glance.** 12 of the 23 requirements are fully implemented and 11 are partly implemented; none is missing (see [docs/REQUIREMENTS_STATUS.md](docs/REQUIREMENTS_STATUS.md)). The automated tests pass with a mocked model: 10 of the 12 acceptance scenarios Pass and 2 are Partial ([docs/ACCEPTANCE_TEST_REPORT.md](docs/ACCEPTANCE_TEST_REPORT.md)). The AI tool-calling path (AI03) is **Partial**: it has not completed a successful real-model end-to-end run. The gaps are listed in [Known limitations](#10-known-limitations-and-unverified-behaviour) and [docs/SUBMISSION_GAP_SUMMARY.md](docs/SUBMISSION_GAP_SUMMARY.md).
 
 **Verification labels used below:**
 - **[Executed]**: run during this project's development, and the result is recorded in `docs/DebugAndTests/`, or the run is named in this README.
@@ -150,8 +150,8 @@ Scope: these are focused runs. Each evidence file states the exact commands and 
 
 ```powershell
 dotnet build src/MaintenancePlanner.Api/MaintenancePlanner.Api.csproj   # executed during development (0 errors)
-cd frontend; npm test                                                    # vitest; not run as part of the evidence
-dotnet test MaintenancePlanner.slnx                                      # full suite; not run in these stages — includes the failing test above
+cd frontend; npm test                                                    # vitest; run in the final verification: 112 tests passed (docs/DebugAndTests/Final_Frontend_Vitest.txt)
+dotnet test MaintenancePlanner.slnx                                      # full suite as one command: not issued. The same test methods were run in focused groups (see above).
 ```
 
 ## 7. Sample data, seed and reset
@@ -254,7 +254,7 @@ Each entry below is taken from code or a recorded run.
 | Planning job fails with `OLLAMA_INVALID_OUTPUT` | The model's final JSON did not match the schema. This is not retried. |
 | Import reports "already exists" | The data was imported before. Imports are insert-only, so nothing changes. |
 | The import script stops with a non-200 status | The file that failed was not saved. Earlier files remain imported. Fix the file and run the script again. |
-| `OllamaPlanningJobIntegrationTests` fail | Pre-existing fixture problem (see [§6](#6-tests)). Unrelated to the application code paths. |
+| `DirectoryNotFoundException` from `FindRepositoryRoot` in `OllamaPlanningJobIntegrationTests`, `AT03_ConflictPersistenceAndApiTests` or `AT04_InfeasibilityTests` | A stale fixture path (the requirements file moved to `docs/`). Fixed in the final verification: the three fixtures now accept `docs/requirementsforpoc.md`. On an older checkout, apply the same one-line change (see [§6](#6-tests)). |
 | Running the API changes `maintenance-planner.db` | The database at the repository root is **tracked by git**. Running the API writes to it. Use a copy for demonstrations you do not want to keep (see [§7](#7-sample-data-and-seed-or-reset)). |
 
 ## 10. Known limitations and unverified behaviour
@@ -322,7 +322,7 @@ Each entry below is taken from code or a recorded run.
 - [docs/DebugAndTests/AI03_WindowIdFix_Tests.txt](docs/DebugAndTests/AI03_WindowIdFix_Tests.txt): window-ID prompt fix (E-AI03-09)
 - [docs/DebugAndTests/AI03_Stage3_RealModelRun.txt](docs/DebugAndTests/AI03_Stage3_RealModelRun.txt): the real-model run that timed out (E-AI03-08)
 - [docs/DebugAndTests/AI03_Stage3_OllamaCompatibilityPreflight.txt](docs/DebugAndTests/AI03_Stage3_OllamaCompatibilityPreflight.txt): Ollama and model metadata (E-AI03-07)
-- [docs/Recordings/](docs/Recordings/) and [docs/Screenshots/](docs/Screenshots/): recordings and screenshots, not all inspected
+- [docs/Recordings/](docs/Recordings/) and [docs/Screenshots/](docs/Screenshots/): owner-confirmed demonstration recordings and screenshots (not inspected by the assistant)
 - Exports: [V1](docs/V1_plan-64a5f783-dd4c-4bd9-a360-0e95526cff44.pdf) and [V2](docs/V2_plan-a6d12df5-3b03-43fb-a640-e6e8d4b72937.pdf) approved plans, with JSON counterparts in `docs/`
 
 **Pending documents:** none of the documents listed in earlier versions of this README (`docs/ARCHITECTURE.md`, `docs/API.md`, `docs/AI_DESIGN.md`, `docs/DATA_DICTIONARY.md`, `docs/SUBMISSION_HANDOVER.md`) is pending any more. **Documents existing does not mean the submission is complete:** the open functional, evidence and administrative gaps are listed in [docs/SUBMISSION_GAP_SUMMARY.md](docs/SUBMISSION_GAP_SUMMARY.md).

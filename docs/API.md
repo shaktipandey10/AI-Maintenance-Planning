@@ -2,7 +2,7 @@
 
 This is the API specification (DEL06) for the AI Maintenance Planner. It lists every endpoint, its request and response shapes, its status codes, and the behaviour of validation errors, conflicts, idempotency, approval, cancellation and job progress.
 
-It was written from source at HEAD `1376af5` plus uncommitted changes. **Nothing was run in the stage that wrote it:** no test, no API, no Ollama call, no database access. The examples in section 10 are **illustrative: they are derived from the DTO definitions and from the request bodies and assertions in the integration tests, and they are not captured live responses.** Section 11 states exactly what was and was not verified.
+It was written from source (HEAD `1376af5` plus changes that are now committed in `08748af`). The integration tests that exercise these routes later passed (section 11); the live API and the real model were not used by the assistant. The examples in section 10 are **illustrative: they are derived from the DTO definitions and from the request bodies and assertions in the integration tests, and they are not captured live responses.** Section 11 states exactly what was and was not verified.
 
 Related documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md): components, workflow, states, transactions. §6 is the endpoint overview that this note extends.
@@ -433,10 +433,10 @@ Response `200`: `{ "succeeded": true, "taskId": "P101-PREP", "status": "InProgre
 
 | Level | Status |
 |---|---|
-| **Source inspection** (this stage) | All 32 routes, their request and response records, route constraints, status codes and error shapes were read from `src/MaintenancePlanner.Api/` and the `Application` contracts. The conflict codes come from the service constants and `DraftApprovalService.cs`. |
+| **Source inspection** | All 32 routes, their request and response records, route constraints, status codes and error shapes were read from `src/MaintenancePlanner.Api/` and the `Application` contracts. The conflict codes come from the service constants and `DraftApprovalService.cs`. |
 | **Automated tests (source)** | Integration test files exist that reference each route and assert HTTP status codes (for example `PlanningJobEndpointsTests`, `F02SelectedAlternativeApprovalTests`, `FR05EditsAndLocksFileDatabaseTests`, `FR02DataImportFileDatabaseTests`, `AT14CandidateRetrievalTests`, `AT15DraftDetailTests`, `F06ConsumptionAndExportFileDatabaseTests`, `MaintenancePlannerReadEndpointsTests`). This mapping is by file (route text and status assertions in the same file), not by individual assertion. |
 | **Captured test evidence** | Only the runs in the [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) run register count. Runs R-13 to R-20 (2026-10-29) passed the integration test classes that exercise these routes in process, over HTTP, with isolated databases and a mocked model (50, 233 and 38 integration tests, among others). The register now shows 10 scenarios Pass and 2 Partial. Before those runs, 0 scenarios were Pass. An individual status code in this document is supported only if a passing test in those logs asserts it; the route-to-test mapping was done by file, not by assertion. |
-| **Live API verification** | **None in this stage.** The only recorded live-API use is R-12 (one real planning request against a database copy). The job failed with `OLLAMA_TIMEOUT`, so it did not exercise approval, edits, locks, progress, export or imports. Screenshots and recordings may show other calls; they were not inspected. |
+| **Live API verification** | **None captured.** The owner reports using the application by hand (task progress, exports, resource edits and replanning), which exercises these endpoints; those checks are not captured. The only recorded live-API use is R-12 (one real planning request against a database copy). The job failed with `OLLAMA_TIMEOUT`, so it did not exercise approval, edits, locks, progress, export or imports. Screenshots and recordings may show other calls; they were not inspected. |
 | **OpenAPI document** | Not generated or compared. The Swagger and OpenAPI paths are from configuration, not from a check. |
 
 **Uncertain or unverified:**
