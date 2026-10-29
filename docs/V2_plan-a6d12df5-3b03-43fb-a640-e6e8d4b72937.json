@@ -1,0 +1,42 @@
+{
+  "draftId": "a6d12df5-3b03-43fb-a640-e6e8d4b72937",
+  "approvedAtUtc": "2026-10-27T23:26:58.4452475+00:00",
+  "planningJobId": "76365f04-cb9a-4a49-af42-4665d2719ef3",
+  "progress": {
+    "totalRequired": 1.0,
+    "completedQuantity": 1.0,
+    "remainingQuantity": 0.0,
+    "percentComplete": "100.0"
+  },
+  "tasks": [
+    {
+      "sparePartId": "BR-101",
+      "requiredQuantity": 1.0,
+      "completedQuantity": 1.0,
+      "remainingQuantity": 0.0
+    }
+  ],
+  "taskPlacements": [
+    {
+      "taskId": "P101-BEARING-REPLACEMENT",
+      "start": "2026-10-24T09:00:00+05:30",
+      "end": "2026-10-24T12:00:00+05:30",
+      "technicianIds": [
+        "TECH-002",
+        "TECH-001"
+      ],
+      "status": "Completed",
+      "statusUpdatedAtUtc": "2026-10-27T23:35:57.8013049+00:00"
+    },
+    {
+      "taskId": "P101-VERIFICATION",
+      "start": "2026-10-24T12:00:00+05:30",
+      "end": "2026-10-24T14:00:00+05:30",
+      "technicianIds": [
+        "TECH-003"
+      ],
+      "status": "InProgress",
+      "statusUpdatedAtUtc": "2026-10-27T23:36:14.7372773+00:00"
+    }
+  ]
+}
