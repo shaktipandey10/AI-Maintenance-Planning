@@ -1,11 +1,45 @@
 # Submission Handover Note
 
-Handover note (DEL10) and correction report (feedback point 34) for the AI Maintenance Planner. Updated on 2026-10-29 after the final verification functional assessment and focused test runs.
+Handover note (DEL10) and correction report (feedback point 34) for the AI Maintenance Planner. Updated on 2026-10-29 after the functional assessment and the final verification runs.
 
 **Basis.** Source and documents were read. Focused automated tests were run on 2026-10-29 with a mocked model and isolated in-memory or temporary databases (run register R-13 to R-20 in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md)). **The API was not started, the real model was not called, and the original database and its sidecars were not opened.** Where a fact is not in the repository it is marked **Owner confirmation required** and is not estimated.
 
 **Recommendation.** The submission is **not fully verified and not yet complete**. Eleven requirements are only Partially implemented and several development and verification gaps remain (section 11 and [SUBMISSION_GAP_SUMMARY.md](SUBMISSION_GAP_SUMMARY.md)). The automated tests that exist all pass, but no behaviour has been verified with the real model.
 
+## At a glance
+
+| Item | Result |
+|---|---|
+| Requirements (23) | **12 Implemented, 11 Partially implemented, 0 Not implemented** ([REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md)) |
+| Backend automated tests | **606 test cases passed**, with a mocked model and isolated databases |
+| Frontend automated tests | **112 tests passed** |
+| Acceptance scenarios | **10 Pass — Automated, 2 Partial (AT05, AT12), 0 Fail, 0 Not Verified** ([ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md)) |
+| Manual checks by the owner | **Completed — Manually Tested by Owner:** task progress; V1 and V2 exports checked against their planning job IDs; resource edits with replanning |
+| Demonstration and exports | **Owner-confirmed:** demonstration videos (including a 16-minute demonstration) and the B1 and B2 PDF and JSON exports (section 7) |
+
+### The three submission deliverables
+
+| Deliverable | Where to find it |
+|---|---|
+| **1. Corrected requirement matrix** | [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) (implementation and verification tables for all 23 requirements); per-requirement code, test and evidence references in [FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md) and [AI_REQUIREMENTS_TRACEABILITY.md](AI_REQUIREMENTS_TRACEABILITY.md); summary in section 3 below |
+| **2. Correction report** (gap, cause, correction, verification) | Section 2 below; the feedback-point mapping in [FEEDBACK_TRACEABILITY.md](FEEDBACK_TRACEABILITY.md); verification results in [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) and the run register in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md); open gaps in [SUBMISSION_GAP_SUMMARY.md](SUBMISSION_GAP_SUMMARY.md) |
+| **3. Updated repository, setup, AT01 to AT12 results and demonstration and export evidence** | Repository state and commits: section 8 below; setup: [README.md](../README.md) and section 6 below; AT01 to AT12: [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) and section 4 below; demonstration and export inventory: section 7 below (owner-confirmed, not independently inspected). Edits made after commit `7b32b28` are uncommitted. |
+### Where each resubmission deliverable is
+
+| # | Deliverable | Where it is | Current state |
+|---|---|---|---|
+| 1 | Requirement matrix | [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) | 12 Implemented, 11 Partially implemented, 0 Not implemented; verification recorded separately |
+| 2 | Correction report | Section 2 | Present; most causes are marked Owner confirmation required |
+| 3 | Setup instructions and verification account | [README.md](../README.md); section 6 | Setup is documented; a clean setup is **Pending Verification**. The application has no authentication (roles are self-declared), so there is no account to create |
+| 4 | Acceptance tests AT01 to AT12 | [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) | 10 Pass — Automated, 2 Partial |
+| 5 | Imports and validation | FR02 in [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) | Implemented; Automated Tests Passed; the import script on a fresh database is Pending Verification |
+| 6 | Selection, approval, reservations, revisions, retries, cancellation, locking | FR05, FR06, FR08, APP02 to APP04, APP06 | Mostly Implemented; APP02 and APP06 Partially implemented (requires-review outcome, retry guidance) |
+| 7 | Progress and exports | FR08, FR10 | FR08 Implemented, Automated Tests Passed and Completed — Manually Tested by Owner (task progress); for exports the owner checked the V1 and V2 files against their planning job IDs only, and FR10 is Partially implemented because assumptions, evidence and deferred work are not exported |
+| 8 | Editing, replanning, change comparison, saved plans, history | FR05, FR07, FR09 | Editing Implemented; FR07 and FR09 Partially implemented; there is no before-and-after comparison (D-01) |
+| 9 | AI01 to AI07, mocked versus real | [AI_REQUIREMENTS_TRACEABILITY.md](AI_REQUIREMENTS_TRACEABILITY.md); [AI_DESIGN.md](AI_DESIGN.md) | All automated results use a mocked model; the real-model run failed with `OLLAMA_TIMEOUT`; AI02 to AI06 Partially implemented |
+| 10 | Recovery, persistence, idempotency, failures | APP03 to APP06; AT06 to AT10 | Automated Tests Passed; a live process restart is Pending Verification |
+| 11 | Demonstrations and V1 and V2 exports | Section 7 | Owner-confirmed; not inspected by the assistant |
+| 12 | Effort, cost, reuse, AI assistance, licences | Section 10; R-02 and R-03 in [SUBMISSION_GAP_SUMMARY.md](SUBMISSION_GAP_SUMMARY.md) | **Owner confirmation required**; no figures or licence conclusions are given here |
 ## 1. Project overview and documents
 
 The AI Maintenance Planner is a proof of concept. An ASP.NET Core (.NET 10) API with a background worker plans maintenance work from a free-text request. A local Ollama model (`qwen2.5:7b`) interprets the request, a deterministic scheduler and validator build and check candidate plans, and a reviewer approves one, which reserves spare parts. SQLite stores the data. A React, TypeScript and Vite frontend drives the workflow.
@@ -35,31 +69,31 @@ One row per feedback area ([Feedback.md](Feedback.md)). **Cause** is given only 
 | Recovery and failures (29 to 32) | Interruption recovery; consistent state; duplicate prevention; actionable failures | Not recorded | Lease-based worker with heartbeat, checkpoint after a validated interpretation, idempotency keys, coded failure outcomes | Recovery, checkpoint-resume, idempotency and failure tests passed (R-13, R-14). The restart is an in-process host restart; no live process restart was run. |
 | Resubmission 33 | Corrected requirement matrix | Not recorded | [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) | Exists. Re-rated in final verification (section 3). |
 | Resubmission 34 | Correction report | Not recorded | This section | Causes are mostly unknown; the owner can supply them. |
-| Resubmission 35 | Fixed commit | Not recorded | Baseline commit `08748af` and the documentation follow-up commit (section 8) | Established in two commits: `08748af` is the baseline against which the source and test results were reviewed, and the documentation follow-up commit holds the final documents. See section 8 for what they exclude. |
+| Resubmission 35 | Fixed commit | Not recorded | Baseline commit `08748af` and the documentation follow-up commit `7b32b28` (section 8) | Established in two commits: `08748af` is the baseline against which the source and test results were reviewed, and the documentation follow-up commit `7b32b28` holds the final documents. See section 8 for what they exclude. |
 | Resubmission 36 | Setup instructions | Not recorded | [README.md](../README.md) | A clean setup was **not** run; there is no reset command. |
-| Resubmission 37 | AT01 to AT12 results | Not recorded | [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) | 10 Pass, 2 Partial (AT05, AT12), all with a mocked model. |
+| Resubmission 37 | AT01 to AT12 results | Not recorded | [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) | 10 Pass — Automated, 2 Partial (AT05, AT12), all with a mocked model. |
 | Resubmission 38 | The demonstration | Not recorded | Owner-confirmed demonstration videos (section 7) | Not inspected. |
 | Resubmission 39 | Approved V1 and revised V2 exports | Not recorded | Owner-confirmed B1 and B2 exports (section 7) | Not inspected. |
 
 ## 3. Requirement coverage
 
-Rated by what the source implements, with verification tracked separately ([REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md)). Missing test evidence alone does not make a requirement Partial.
+Rated by what the source implements, with verification tracked separately ([REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md)). Missing test evidence alone does not make a requirement Partially implemented.
 
 | Classification | Count | Requirements |
 |---|---|---|
-| Fully implemented | **12** | FR01, FR02, FR03, FR05, FR06, FR08, AI01, AI07, APP01, APP03, APP04, APP05 |
-| Partial (behaviour missing or incomplete) | **11** | FR04, FR07, FR09, FR10, AI02, AI03, AI04, AI05, AI06, APP02, APP06 |
+| Implemented | **12** | FR01, FR02, FR03, FR05, FR06, FR08, AI01, AI07, APP01, APP03, APP04, APP05 |
+| Partially implemented (behaviour missing or incomplete) | **11** | FR04, FR07, FR09, FR10, AI02, AI03, AI04, AI05, AI06, APP02, APP06 |
 | Not implemented | **0** | none |
 | Cannot be established from source | **0** | none |
 | **Total** | **23** | FR01 to FR10, AI01 to AI07, APP01 to APP06 |
 
-**Fully implemented and still awaiting verification: 3.** AI01 and AI07 await a real-model run, and APP05 awaits a live process restart and a frontend test of the disabled-submit state. The other nine fully implemented requirements have captured passing automated runs.
+**Implemented and still awaiting verification: 3.** AI01 and AI07 await a real-model run, and APP05 awaits a live process restart and a frontend test of the disabled-submit state. The other nine implemented requirements have captured passing automated runs.
 
-**Changes in final verification:** FR10 moved from Implemented to Partial after the export code was read (assumptions, evidence and deferred work are not exported). AI01, AI07 and APP05 moved from Partial to Implemented because their earlier Partial reasons were missing verification, not missing behaviour. AI03 stays Partial because two of its tools lack the replanning context and there is no real-model success.
+**Changes in final verification:** FR10 moved from Implemented to Partially implemented after the export code was read (assumptions, evidence and deferred work are not exported). AI01, AI07 and APP05 moved from Partially implemented to Implemented because their earlier ratings were due to missing verification, not missing behaviour. AI03 stays Partially implemented because two of its tools lack the replanning context and there is no real-model success.
 
 ## 4. Acceptance-test status
 
-As recorded in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md): **10 Pass** (AT01, AT02, AT03, AT04, AT06, AT07, AT08, AT09, AT10, AT11), **2 Partial** (AT05, AT12), 0 Fail, 0 Not verified. Earlier state: 0 Pass, 3 Partial, 9 Not verified.
+As recorded in [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md): **10 Pass — Automated** (AT01, AT02, AT03, AT04, AT06, AT07, AT08, AT09, AT10, AT11), **2 Partial** (AT05, AT12), 0 Fail, 0 Not Verified. Earlier state: 0 Pass, 3 Partial, 9 Not Verified.
 
 What the evidence is and is not:
 - All backend test methods that `dotnet test --list-tests` reports were run in eight focused groups and passed (606 test cases). The frontend suite passed (112 tests in 9 files). Each log header records the command, time and repository state.
@@ -68,7 +102,7 @@ What the evidence is and is not:
 - AT09 is an in-process restart, not a live process restart.
 - A test-fixture path was fixed first: three fixtures looked for `requirementsforpoc.md` at the repository root. That is the failure recorded as R-08, and it kept AT03 and AT04 from running.
 - No small real-model AI evaluation set exists.
-- **Owner-reported manual checks (not repeated by the assistant):** task progress, the exports against the V1 and V2 planning job IDs, and resource edits with replanning were checked by hand in the running application. They are labelled *Completed. Manually verified by owner* in [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) and [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) section 11, and do not change the automated statuses.
+- **Owner-reported manual checks (not repeated by the assistant):** task progress, the exports against the V1 and V2 planning job IDs, and resource edits with replanning were checked by hand in the running application. They are labelled *Completed — Manually Tested by Owner* in [REQUIREMENTS_STATUS.md](REQUIREMENTS_STATUS.md) and [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md) section 11, and do not change the automated statuses.
 
 ## 5. Known limitations
 
@@ -101,7 +135,7 @@ What the evidence is and is not:
 
 ## 7. Demonstration and export inventory
 
-**Owner-confirmed deliverables.** The owner reports that demonstration videos have been prepared, including a 16-minute demonstration, and that B1 and B2 PDF and JSON exports have been produced. These are recorded here as owner-confirmed. **Their content, duration, lineage and approval were not inspected or assessed for this documentation.** The 16-minute demonstration is not identified among the files below, and the repository exports are named `V1_` and `V2_`, so the owner should confirm which files are the B1 and B2 exports.
+**Owner-confirmed deliverables.** The owner reports that demonstration videos have been prepared, including a 16-minute demonstration, and that B1 and B2 PDF and JSON exports have been produced. These are recorded here as owner-confirmed. **Their content, duration, lineage and approval were not inspected or assessed for this documentation.** Naming note: the repository export files are named `V1_` and `V2_`; B1 and B2 are the owner's labels. No mapping between individual files and B1 or B2 is recorded here, and the files were not independently inspected. The 16-minute demonstration is not identified among the files listed below.
 
 **Files present in the repository** (names and counts only):
 - `docs/Recordings/`: 12 `.webm` files (about 149 MB): `AlternativeApproval_EndtoEnd`, `Cancelation_SparePartRelease`, `Candidate_Approval_Draft_Progressing_flow`, `ImportOfDataValidAndInvalid`, `Infeasible_scenerio`, `JobScheduling`, `Locking_Revision_Replan_Idempotency_ClarificationWindow`, `Restart_JobRunScenario`, `TaskProgres_ReplanWorkPreservation`, `V1-V2_lifecycle`, `V1-V2_lifecycle_Part2`, `V1-V2_lineageDemo`.
@@ -109,7 +143,7 @@ What the evidence is and is not:
 - `docs/` exports: 11 files: `V1_plan`, `V1_latest_plan` (`.json`, `.pdf`), `V1_Superseded` (`.pdf`), `V1_Draft` (`.pdf`), `V2_plan`, `V2_latest_plan` (`.json`, `.pdf`), `V2_Draft` (`.pdf`).
 - `docs/DebugAndTests/`: the test logs, including the final verification logs `Final_*.txt`.
 
-**Not in commit `08748af`:** the recordings, screenshots and exports, and `docs/DebugAndTests/AlternativeSelection.txt`, a manual test note that pre-dates this work and was not reviewed for it. They were left untouched and uncommitted so the owner can decide how to package them. Documents that link to them link to files that exist in the working tree but not in the commit.
+**Tracking state (checked with `git ls-files` and `git status`):** 3 of the 12 recordings and 17 of the 53 screenshots are tracked in earlier commits. 9 recordings, 36 screenshots and all 11 exports are untracked, as is `docs/DebugAndTests/AlternativeSelection.txt`, a manual test note that pre-dates this work and was not reviewed for it. The untracked files were left as found so the owner can decide how to package them. Documents that link to an untracked file link to a file that exists in the working tree but is in no commit.
 
 ## 8. Repository state
 
@@ -118,9 +152,9 @@ What the evidence is and is not:
 | HEAD before final verification | `1376af5`, 2026-10-28 12:02:31 +05:30, "Add post-feedback maintenance planner corrections" |
 | Branch | `feedback-corrections` |
 | Remote | `origin` is configured to `https://github.com/shaktipandey10/AI-Maintenance-Planning.git`. Whether a reviewer can access it was **not checked**. |
-| Commits | **Baseline commit `08748af`** on `feedback-corrections` (parent `1376af5`), against which the source and test results were reviewed. Its source, test and frontend files are the ones the final verification runs tested. It does not contain the final documentation. The **documentation follow-up commit** after it holds the final documents (including the owner-reported manual-verification notes and consistency fixes); its hash is in `git log`. |
+| Commits | **Baseline commit `08748af`** on `feedback-corrections` (parent `1376af5`), against which the source and test results were reviewed. Its source, test and frontend files are the ones the final verification runs tested. It does not contain the final documentation. The **documentation follow-up commit** after it holds the final documents (including the owner-reported manual-verification notes and consistency fixes); it is commit `7b32b28` (parent `08748af`). Further documentation edits after `7b32b28` are in the working tree until the owner approves a commit. |
 | Committed | Documentation (including the test logs and this note), the AI03 source and tests, the frontend changes and the import-screen files, the three-file test-fixture path fix, and `data/fixtures/fr02-demo/` |
-| Not committed (left as found) | `maintenance-planner.db` (modified) and its sidecars; the 12 deleted archived documents; the recordings, screenshots and exports; `AlternativeSelection.txt` |
+| Not committed (left as found) | `maintenance-planner.db` (modified) and its sidecars; the 12 deleted archived documents; 9 untracked recordings, 36 untracked screenshots and all 11 exports; `AlternativeSelection.txt`; and the documentation edits made after `7b32b28` |
 
 No reset, clean, restore or deletion was performed.
 
@@ -154,14 +188,14 @@ No reset, clean, restore or deletion was performed.
 
 ## 11. Submission blockers and recommended next actions
 
-Full detail, severity and the evidence that closes each item is in [SUBMISSION_GAP_SUMMARY.md](SUBMISSION_GAP_SUMMARY.md). In order of risk:
+Full detail and the evidence that closes each item is in [SUBMISSION_GAP_SUMMARY.md](SUBMISSION_GAP_SUMMARY.md). In order of risk:
 
 **Development work**
 1. **Change comparison** between revisions (FR07, AI06; feedback point 19).
 2. **Complete the exports** with assumptions, evidence references and deferred work (FR10).
 3. **Repair step** for model output (AI04), and **inspectable evidence** in the candidate and draft APIs and UI (AI02).
 4. **Reset command** (the original deliverables require seed and reset tooling).
-5. Decide on the other Partial requirements: requires-review outcome (APP02), retry guidance (APP06), request recording (FR09), explanations (AI05), AI03 limits, and the single-alternative statement (FR04).
+5. Decide on the other partially implemented requirements: requires-review outcome (APP02), retry guidance (APP06), request recording (FR09), explanations (AI05), AI03 limits, and the single-alternative statement (FR04).
 
 **Verification**
 6. **A successful real-model end-to-end run** (needs approval, faster hardware or a longer timeout), or an explicit acceptance of the limitation.

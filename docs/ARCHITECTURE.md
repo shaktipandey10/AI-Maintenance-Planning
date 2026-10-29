@@ -8,7 +8,7 @@ Related documents:
 - [FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md](FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md), [AI_REQUIREMENTS_TRACEABILITY.md](AI_REQUIREMENTS_TRACEABILITY.md), [FEEDBACK_TRACEABILITY.md](FEEDBACK_TRACEABILITY.md): detailed traceability
 - [ACCEPTANCE_TEST_REPORT.md](ACCEPTANCE_TEST_REPORT.md): acceptance scenarios AT01–AT12 and the run register
 
-**AI03 status:** Partial. A successful real-model end-to-end run is still outstanding. The one real-model run (E-AI03-08) ended in `OLLAMA_TIMEOUT`.
+**AI03 status:** Partially implemented. A successful real-model end-to-end run is still outstanding. The one real-model run (E-AI03-08) ended in `OLLAMA_TIMEOUT`.
 
 ---
 

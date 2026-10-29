@@ -4,7 +4,7 @@ This is the AI design note (DEL05) for the AI Maintenance Planner. It records wh
 
 It was written from source (HEAD `1376af5` plus the AI03 work that was then uncommitted, now committed in `08748af`). Statements about behaviour come from reading code and are backed by the mocked-model test runs listed in section 9. The live API and the real model were not used, except for the one recorded real-model run (E-AI03-08). The evidence for each claim is classified in section 9 as source inspection, mocked test, or real-model run.
 
-**Headline status:** the model-callable tools (AI03) are implemented and tested with a mocked model. The one recorded real-model run **timed out** (`OLLAMA_TIMEOUT`). **A successful real-model end-to-end run has not been demonstrated.** AI03 stays **Partial**.
+**Headline status:** the model-callable tools (AI03) are implemented and tested with a mocked model. The one recorded real-model run **timed out** (`OLLAMA_TIMEOUT`). **A successful real-model end-to-end run has not been demonstrated.** AI03 is **Partially implemented**.
 
 Related documents:
 - [ARCHITECTURE.md](ARCHITECTURE.md) §8 is the high-level overview of the AI components, the tool loop and the failure codes. This note adds the detail and does not repeat the overview.
@@ -285,7 +285,7 @@ Six tools exist in `src/MaintenancePlanner.Application/Planning/Tools/`. They ar
 
 - There is **no retry inside the interpreter**: each failure is thrown to the job.
 - The job layer retries only **transient** failures (`OLLAMA_TIMEOUT`, `OLLAMA_UNAVAILABLE`, and `OLLAMA_HTTP_ERROR` for HTTP 408, 429 and 5xx), up to `MaxAttempts`. After that the job is `Failed`. See [ARCHITECTURE.md](ARCHITECTURE.md) §9.
-- There is **no repair loop**: validator violations are not sent back to the model automatically. The model sees violations only if it calls `validate_schedule`, `calculate_cost` or `save_candidate`, and it chooses whether to revise (AI04 is Partial).
+- There is **no repair loop**: validator violations are not sent back to the model automatically. The model sees violations only if it calls `validate_schedule`, `calculate_cost` or `save_candidate`, and it chooses whether to revise (AI04 is Partially implemented).
 
 ### 7.3 Failure codes
 
@@ -357,7 +357,7 @@ Three classes of evidence are kept apart. Only the third class can show real-mod
 1. **No successful real-model end-to-end run** (section 9). On CPU-only hardware the 180-second timeout was exceeded.
 2. **The model version is not pinned.** Only a tag is configured, and no digest is recorded.
 3. **Sampling is not controlled.** No temperature or seed is sent, so repeated runs may differ.
-4. **No repair or revise step.** Validator violations are not fed back automatically (AI04 Partial).
+4. **No repair or revise step.** Validator violations are not fed back automatically (AI04 partially implemented).
 5. **No tool-call audit.** Tool calls are not recorded in the job result, so a reviewer cannot see what the model called.
 6. **`validate_schedule` and `calculate_cost` lack the replaced-plan context.** They do not know completed work or held parts during a replan. Only `save_candidate` has it.
 7. **Availability is declared, not free time.** `get_technician_availability` does not subtract time committed to other approved plans. Approval does check it.
@@ -365,7 +365,7 @@ Three classes of evidence are kept apart. Only the third class can show real-mod
 9. **Retrieval is keyword overlap.** No stemming, synonyms or semantic search. The cross-document conflict check uses a short list of phrases. Scanned PDFs are not supported.
 10. **Evidence kinds `Technician`, `SparePart` and `Compatibility` exist but are never produced.**
 11. **Prompt-injection resistance is not tested.**
-12. **Explanations are fixed text per scheduling policy** (AI05 Partial), and there is no before-and-after change summary (AI06 Partial).
+12. **Explanations are fixed text per scheduling policy** (AI05 partially implemented), and there is no before-and-after change summary (AI06 partially implemented).
 13. **No requires-review state** when a resource changes after approval.
 14. **Existing test failures** (E-AI03-06) are unrelated to AI03 but remain unfixed.
 15. **Roles are self-declared**, not authenticated.

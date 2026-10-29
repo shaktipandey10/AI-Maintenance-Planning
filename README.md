@@ -4,7 +4,25 @@ A proof-of-concept application that helps a planner turn a natural-language main
 
 The scope comes from [docs/requirementsforpoc.md](docs/requirementsforpoc.md) (the original assignment) and [docs/Feedback.md](docs/Feedback.md) (the reviewer's feedback). Current status is in [docs/REQUIREMENTS_STATUS.md](docs/REQUIREMENTS_STATUS.md).
 
-> **Status at a glance.** 12 of the 23 requirements are fully implemented and 11 are partly implemented; none is missing (see [docs/REQUIREMENTS_STATUS.md](docs/REQUIREMENTS_STATUS.md)). The automated tests pass with a mocked model: 10 of the 12 acceptance scenarios Pass and 2 are Partial ([docs/ACCEPTANCE_TEST_REPORT.md](docs/ACCEPTANCE_TEST_REPORT.md)). The AI tool-calling path (AI03) is **Partial**: it has not completed a successful real-model end-to-end run. The gaps are listed in [Known limitations](#10-known-limitations-and-unverified-behaviour) and [docs/SUBMISSION_GAP_SUMMARY.md](docs/SUBMISSION_GAP_SUMMARY.md).
+## Delivered and verified
+
+The planner is built end to end: import of reference data and manuals, natural-language planning requests, evidence-backed alternatives checked by a deterministic validator, approval with spare-part reservations, revisions and replanning, task locks and task progress, cancellation, a business-action history, restart-safe background jobs, and JSON and PDF exports. The React frontend drives the workflow and a local Ollama model (`qwen2.5:7b`) interprets requests.
+
+| Item | Result |
+|---|---|
+| Requirements (23: FR01 to FR10, AI01 to AI07, APP01 to APP06) | **12 Implemented, 11 Partially implemented, 0 Not implemented** ([docs/REQUIREMENTS_STATUS.md](docs/REQUIREMENTS_STATUS.md)) |
+| Backend automated tests | **606 test cases passed** (mocked model; isolated databases) |
+| Frontend automated tests | **112 tests passed** |
+| Acceptance scenarios AT01 to AT12 | **10 Pass — Automated, 2 Partial (AT05, AT12), 0 Fail, 0 Not Verified** ([docs/ACCEPTANCE_TEST_REPORT.md](docs/ACCEPTANCE_TEST_REPORT.md)) |
+| Manual checks by the owner | **Completed — Manually Tested by Owner:** task progress; V1 and V2 exports checked against their planning job IDs; resource edits with replanning |
+| Demonstration and exports | **Owner-confirmed:** demonstration videos (including a 16-minute demonstration) and the B1 and B2 PDF and JSON exports |
+
+**What these results do and do not show.**
+
+- Every automated pass used a mocked or fixed model interpretation. The one real-model run failed with `OLLAMA_TIMEOUT`, so the AI tool-calling path (AI03) is Partially implemented and no behaviour is verified with the real model.
+- The manual checks were done by the owner and were not repeated by the assistant. They do not change the automated results.
+- Known limitations: there is no before-and-after revision comparison; the exports omit assumptions, evidence references and deferred work; there is no validation-repair step (AI04); AI02 evidence is shown as source IDs in the UI; there is no seed and reset command. A clean setup, a real-model evaluation and a live-process restart have not been verified.
+- Details and every remaining gap: [docs/SUBMISSION_HANDOVER.md](docs/SUBMISSION_HANDOVER.md) and [docs/SUBMISSION_GAP_SUMMARY.md](docs/SUBMISSION_GAP_SUMMARY.md); see also [Known limitations](#10-known-limitations-and-unverified-behaviour).
 
 **Verification labels used below:**
 - **[Executed]**: run during this project's development, and the result is recorded in `docs/DebugAndTests/`, or the run is named in this README.
@@ -259,7 +277,7 @@ Each entry below is taken from code or a recorded run.
 
 ## 10. Known limitations and unverified behaviour
 
-**AI03 (model tool calling): Partial.**
+**AI03 (model tool calling): Partially implemented.**
 - **No successful real-model end-to-end run exists.** The one run with `qwen2.5:7b` (E-AI03-08) made valid tool calls, but the job failed with `OLLAMA_TIMEOUT` on CPU-only inference. The configured timeout and tool limit were not changed.
 - The saved-candidate approval path is verified with mocked model replies only (E-AI03-11).
 - The `validate_schedule` and `calculate_cost` tools do not receive the replanning context (completed tasks and held parts). Only `save_candidate` does.
@@ -308,7 +326,7 @@ Each entry below is taken from code or a recorded run.
 
 **Submission documents**
 - [docs/SUBMISSION_HANDOVER.md](docs/SUBMISSION_HANDOVER.md): correction report, coverage totals, limitations, repository state, Azure proposal, owner-confirmation items
-- [docs/SUBMISSION_GAP_SUMMARY.md](docs/SUBMISSION_GAP_SUMMARY.md): every remaining gap, with severity and the evidence needed to close it
+- [docs/SUBMISSION_GAP_SUMMARY.md](docs/SUBMISSION_GAP_SUMMARY.md): every remaining gap, with the recommended implementation and the evidence needed to close it
 
 **Detailed traceability**
 - [docs/FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md](docs/FUNCTIONAL_REQUIREMENTS_TRACEABILITY.md): FR01–FR10
